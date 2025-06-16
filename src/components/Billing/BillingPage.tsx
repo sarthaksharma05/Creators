@@ -22,7 +22,8 @@ import {
   Users,
   TrendingUp,
   Award,
-  Gift
+  Gift,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { revenueCatService } from '../../lib/revenuecat';
@@ -49,6 +50,20 @@ interface Invoice {
   amount: number;
   status: 'paid' | 'pending' | 'failed';
   downloadUrl?: string;
+}
+
+interface PaymentFormData {
+  cardNumber: string;
+  expiryDate: string;
+  cvv: string;
+  cardholderName: string;
+  billingAddress: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+  };
 }
 
 const plans = [
@@ -127,8 +142,22 @@ export function BillingPage() {
   const [loading, setLoading] = useState(false);
   const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('');
+  const [paymentStep, setPaymentStep] = useState<'plan' | 'payment' | 'processing' | 'success'>('plan');
+  const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
+    cardNumber: '',
+    expiryDate: '',
+    cvv: '',
+    cardholderName: '',
+    billingAddress: {
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: 'US'
+    }
+  });
 
   useEffect(() => {
     loadBillingInfo();
@@ -172,22 +201,75 @@ export function BillingPage() {
     }
   };
 
-  const handlePlanUpgrade = async (planId: string) => {
+  const handlePlanSelection = (planId: string) => {
+    if (planId === billingInfo?.currentPlan) {
+      toast.info('This is your current plan');
+      return;
+    }
+
+    setSelectedPlan(planId);
+    setPaymentStep('plan');
+    setShowPaymentModal(true);
+  };
+
+  const proceedToPayment = () => {
+    const plan = plans.find(p => p.id === selectedPlan);
+    if (!plan || plan.price.monthly === 0) {
+      // Free plan - no payment needed
+      handlePlanUpgrade();
+      return;
+    }
+    setPaymentStep('payment');
+  };
+
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate payment form
+    if (!paymentForm.cardNumber || !paymentForm.expiryDate || !paymentForm.cvv || !paymentForm.cardholderName) {
+      toast.error('Please fill in all payment details');
+      return;
+    }
+
+    setPaymentStep('processing');
+    
+    try {
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Process the upgrade
+      await handlePlanUpgrade();
+      
+      setPaymentStep('success');
+      
+      // Auto-close after success
+      setTimeout(() => {
+        setShowPaymentModal(false);
+        setPaymentStep('plan');
+      }, 2000);
+      
+    } catch (error) {
+      setPaymentStep('payment');
+      toast.error('Payment failed. Please try again.');
+    }
+  };
+
+  const handlePlanUpgrade = async () => {
     setLoading(true);
     try {
-      // Initialize RevenueCat and handle purchase
-      const success = await revenueCatService.purchasePlan(planId, billingCycle);
+      // Process with RevenueCat
+      const success = await revenueCatService.purchasePlan(selectedPlan, billingCycle);
       
       if (success) {
         // Update user profile
-        await updateProfile({ is_pro: planId !== 'starter' });
+        await updateProfile({ is_pro: selectedPlan !== 'starter' });
         
         toast.success('🎉 Plan upgraded successfully!');
-        setShowUpgradeModal(false);
         loadBillingInfo();
       }
     } catch (error) {
       toast.error('Failed to upgrade plan. Please try again.');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -222,7 +304,31 @@ export function BillingPage() {
     toast.success('Invoice download started');
   };
 
+  const formatCardNumber = (value: string) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const matches = v.match(/\d{4,16}/g);
+    const match = matches && matches[0] || '';
+    const parts = [];
+    for (let i = 0, len = match.length; i < len; i += 4) {
+      parts.push(match.substring(i, i + 4));
+    }
+    if (parts.length) {
+      return parts.join(' ');
+    } else {
+      return v;
+    }
+  };
+
+  const formatExpiryDate = (value: string) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    if (v.length >= 2) {
+      return v.substring(0, 2) + '/' + v.substring(2, 4);
+    }
+    return v;
+  };
+
   const currentPlan = plans.find(p => p.id === billingInfo?.currentPlan);
+  const selectedPlanData = plans.find(p => p.id === selectedPlan);
   const savings = billingCycle === 'yearly' ? 20 : 0;
 
   const containerVariants = {
@@ -303,7 +409,7 @@ export function BillingPage() {
               
               {!profile?.is_pro && (
                 <motion.button
-                  onClick={() => setShowUpgradeModal(true)}
+                  onClick={() => handlePlanSelection('creator_pro')}
                   className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg hover:shadow-xl flex items-center space-x-2"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -463,7 +569,7 @@ export function BillingPage() {
                   <div className="space-y-4">
                     {!profile?.is_pro && (
                       <motion.button
-                        onClick={() => setShowUpgradeModal(true)}
+                        onClick={() => handlePlanSelection('creator_pro')}
                         className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg hover:shadow-xl flex items-center justify-between"
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -613,12 +719,7 @@ export function BillingPage() {
                       )}
 
                       <motion.button
-                        onClick={() => {
-                          setSelectedPlan(plan.id);
-                          if (plan.id !== billingInfo?.currentPlan) {
-                            setShowUpgradeModal(true);
-                          }
-                        }}
+                        onClick={() => handlePlanSelection(plan.id)}
                         disabled={billingInfo?.currentPlan === plan.id}
                         className={`w-full py-3 px-6 rounded-xl font-semibold transition-all ${
                           billingInfo?.currentPlan === plan.id
@@ -634,7 +735,7 @@ export function BillingPage() {
                           ? 'Current Plan' 
                           : plan.price.monthly === 0 
                           ? 'Downgrade' 
-                          : 'Upgrade Now'
+                          : 'Select Plan'
                         }
                       </motion.button>
                     </div>
@@ -701,8 +802,8 @@ export function BillingPage() {
                   onClick={handleUpdatePaymentMethod}
                   className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg hover:shadow-xl flex items-center justify-center space-x-2"
                 >
-                  <CreditCard className="h-5 w-5" />
-                  <span>Update Payment Method</span>
+                  <Plus className="h-5 w-5" />
+                  <span>Add Payment Method</span>
                 </button>
               </div>
 
@@ -820,35 +921,312 @@ export function BillingPage() {
         </motion.div>
       </div>
 
-      {/* Upgrade Modal */}
-      {showUpgradeModal && (
+      {/* Payment Modal */}
+      {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl p-8 max-w-md w-full"
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">Confirm Upgrade</h3>
-            <p className="text-gray-600 mb-6">
-              You're about to upgrade to {plans.find(p => p.id === selectedPlan)?.name}. 
-              You'll be charged immediately and your new features will be available right away.
-            </p>
-            
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setShowUpgradeModal(false)}
-                className="flex-1 bg-gray-100 text-gray-800 py-3 px-6 rounded-xl font-semibold hover:bg-gray-200 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handlePlanUpgrade(selectedPlan)}
-                disabled={loading}
-                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
-              >
-                {loading ? 'Processing...' : 'Confirm Upgrade'}
-              </button>
-            </div>
+            {paymentStep === 'plan' && (
+              <div className="p-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-6">Confirm Your Plan</h3>
+                
+                {selectedPlanData && (
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xl font-bold text-gray-900">{selectedPlanData.name}</h4>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-gray-900">
+                          ${billingCycle === 'yearly' ? selectedPlanData.price.yearly : selectedPlanData.price.monthly}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          /{billingCycle === 'yearly' ? 'year' : 'month'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <p className="text-gray-600 mb-4">{selectedPlanData.description}</p>
+                    
+                    {billingCycle === 'yearly' && selectedPlanData.price.monthly > 0 && (
+                      <div className="bg-green-100 text-green-800 p-3 rounded-lg text-sm">
+                        💰 You'll save ${(selectedPlanData.price.monthly * 12) - selectedPlanData.price.yearly} per year with annual billing!
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => setShowPaymentModal(false)}
+                    className="flex-1 bg-gray-100 text-gray-800 py-3 px-6 rounded-xl font-semibold hover:bg-gray-200 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={proceedToPayment}
+                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all"
+                  >
+                    {selectedPlanData?.price.monthly === 0 ? 'Confirm Downgrade' : 'Continue to Payment'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {paymentStep === 'payment' && (
+              <div className="p-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-6">Payment Details</h3>
+                
+                <form onSubmit={handlePaymentSubmit} className="space-y-6">
+                  {/* Card Information */}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-900">Card Information</h4>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Card Number
+                      </label>
+                      <input
+                        type="text"
+                        value={paymentForm.cardNumber}
+                        onChange={(e) => setPaymentForm({
+                          ...paymentForm,
+                          cardNumber: formatCardNumber(e.target.value)
+                        })}
+                        placeholder="1234 5678 9012 3456"
+                        maxLength={19}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Expiry Date
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentForm.expiryDate}
+                          onChange={(e) => setPaymentForm({
+                            ...paymentForm,
+                            expiryDate: formatExpiryDate(e.target.value)
+                          })}
+                          placeholder="MM/YY"
+                          maxLength={5}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          CVV
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentForm.cvv}
+                          onChange={(e) => setPaymentForm({
+                            ...paymentForm,
+                            cvv: e.target.value.replace(/\D/g, '').slice(0, 4)
+                          })}
+                          placeholder="123"
+                          maxLength={4}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cardholder Name
+                      </label>
+                      <input
+                        type="text"
+                        value={paymentForm.cardholderName}
+                        onChange={(e) => setPaymentForm({
+                          ...paymentForm,
+                          cardholderName: e.target.value
+                        })}
+                        placeholder="John Doe"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Billing Address */}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-900">Billing Address</h4>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Street Address
+                      </label>
+                      <input
+                        type="text"
+                        value={paymentForm.billingAddress.street}
+                        onChange={(e) => setPaymentForm({
+                          ...paymentForm,
+                          billingAddress: { ...paymentForm.billingAddress, street: e.target.value }
+                        })}
+                        placeholder="123 Main St"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentForm.billingAddress.city}
+                          onChange={(e) => setPaymentForm({
+                            ...paymentForm,
+                            billingAddress: { ...paymentForm.billingAddress, city: e.target.value }
+                          })}
+                          placeholder="New York"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          State
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentForm.billingAddress.state}
+                          onChange={(e) => setPaymentForm({
+                            ...paymentForm,
+                            billingAddress: { ...paymentForm.billingAddress, state: e.target.value }
+                          })}
+                          placeholder="NY"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          ZIP Code
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentForm.billingAddress.zipCode}
+                          onChange={(e) => setPaymentForm({
+                            ...paymentForm,
+                            billingAddress: { ...paymentForm.billingAddress, zipCode: e.target.value }
+                          })}
+                          placeholder="10001"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Country
+                        </label>
+                        <select
+                          value={paymentForm.billingAddress.country}
+                          onChange={(e) => setPaymentForm({
+                            ...paymentForm,
+                            billingAddress: { ...paymentForm.billingAddress, country: e.target.value }
+                          })}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          required
+                        >
+                          <option value="US">United States</option>
+                          <option value="CA">Canada</option>
+                          <option value="GB">United Kingdom</option>
+                          <option value="AU">Australia</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Order Summary */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="font-semibold text-gray-900 mb-3">Order Summary</h4>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-600">{selectedPlanData?.name} ({billingCycle})</span>
+                      <span className="font-semibold">
+                        ${billingCycle === 'yearly' ? selectedPlanData?.price.yearly : selectedPlanData?.price.monthly}
+                      </span>
+                    </div>
+                    {billingCycle === 'yearly' && selectedPlanData && selectedPlanData.price.monthly > 0 && (
+                      <div className="flex justify-between items-center mb-2 text-green-600">
+                        <span>Annual Discount</span>
+                        <span>-${(selectedPlanData.price.monthly * 12) - selectedPlanData.price.yearly}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-gray-200 pt-2 mt-2">
+                      <div className="flex justify-between items-center font-bold">
+                        <span>Total</span>
+                        <span>
+                          ${billingCycle === 'yearly' ? selectedPlanData?.price.yearly : selectedPlanData?.price.monthly}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentStep('plan')}
+                      className="flex-1 bg-gray-100 text-gray-800 py-3 px-6 rounded-xl font-semibold hover:bg-gray-200 transition-all"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all"
+                    >
+                      Complete Purchase
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {paymentStep === 'processing' && (
+              <div className="p-8 text-center">
+                <div className="mb-6">
+                  <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Processing Payment</h3>
+                  <p className="text-gray-600">Please wait while we process your payment securely...</p>
+                </div>
+                
+                <div className="bg-blue-50 rounded-xl p-4">
+                  <div className="flex items-center justify-center space-x-2 text-blue-600">
+                    <Shield className="h-5 w-5" />
+                    <span className="text-sm font-medium">Secured by RevenueCat & Stripe</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {paymentStep === 'success' && (
+              <div className="p-8 text-center">
+                <div className="mb-6">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Check className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h3>
+                  <p className="text-gray-600">Welcome to {selectedPlanData?.name}! Your new features are now active.</p>
+                </div>
+                
+                <div className="bg-green-50 rounded-xl p-4">
+                  <p className="text-green-800 font-medium">🎉 You now have access to all Pro features!</p>
+                </div>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

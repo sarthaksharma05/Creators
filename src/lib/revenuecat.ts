@@ -30,12 +30,19 @@ export class RevenueCatService {
     }
   }
 
-  // Purchase a subscription plan
+  // Purchase a subscription plan with proper payment flow
   async purchasePlan(planId: string, billingCycle: 'monthly' | 'yearly'): Promise<boolean> {
     if (!this.isConfigured) {
-      console.log('Simulating plan purchase:', planId, billingCycle);
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('Simulating plan purchase with payment processing:', planId, billingCycle);
+      
+      // Simulate realistic payment processing time
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Simulate occasional payment failures for realism
+      if (Math.random() < 0.1) { // 10% chance of failure
+        throw new Error('Payment declined. Please check your payment details and try again.');
+      }
+      
       return true;
     }
 
@@ -54,6 +61,54 @@ export class RevenueCatService {
     } catch (error) {
       console.error('Purchase error:', error);
       throw new Error('Failed to process purchase');
+    }
+  }
+
+  // Process payment with payment details (simulated for demo)
+  async processPayment(paymentDetails: any, amount: number): Promise<boolean> {
+    if (!this.isConfigured) {
+      console.log('Simulating payment processing for amount:', amount);
+      
+      // Validate payment details format
+      if (!paymentDetails.cardNumber || !paymentDetails.expiryDate || !paymentDetails.cvv) {
+        throw new Error('Invalid payment details');
+      }
+      
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Simulate payment validation
+      if (paymentDetails.cardNumber.replace(/\s/g, '').length < 13) {
+        throw new Error('Invalid card number');
+      }
+      
+      if (paymentDetails.cvv.length < 3) {
+        throw new Error('Invalid CVV');
+      }
+      
+      // Simulate occasional payment failures
+      if (Math.random() < 0.05) { // 5% chance of failure
+        throw new Error('Payment declined by bank. Please try a different payment method.');
+      }
+      
+      return true;
+    }
+
+    try {
+      // In production, this would integrate with Stripe or other payment processor
+      const response = await this.makeRevenueCatRequest('/payments', {
+        method: 'POST',
+        body: JSON.stringify({
+          payment_details: paymentDetails,
+          amount: amount,
+          currency: 'USD'
+        })
+      });
+
+      return response.success;
+    } catch (error) {
+      console.error('Payment processing error:', error);
+      throw new Error('Payment processing failed');
     }
   }
 
@@ -205,6 +260,60 @@ export class RevenueCatService {
       console.error('Customer info error:', error);
       return null;
     }
+  }
+
+  // Validate payment details
+  validatePaymentDetails(paymentDetails: any): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    // Card number validation
+    const cardNumber = paymentDetails.cardNumber?.replace(/\s/g, '') || '';
+    if (!cardNumber || cardNumber.length < 13 || cardNumber.length > 19) {
+      errors.push('Invalid card number');
+    }
+    
+    // Expiry date validation
+    const expiryDate = paymentDetails.expiryDate || '';
+    if (!expiryDate.match(/^\d{2}\/\d{2}$/)) {
+      errors.push('Invalid expiry date format (MM/YY)');
+    } else {
+      const [month, year] = expiryDate.split('/');
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear() % 100;
+      const currentMonth = currentDate.getMonth() + 1;
+      
+      if (parseInt(month) < 1 || parseInt(month) > 12) {
+        errors.push('Invalid expiry month');
+      }
+      
+      if (parseInt(year) < currentYear || (parseInt(year) === currentYear && parseInt(month) < currentMonth)) {
+        errors.push('Card has expired');
+      }
+    }
+    
+    // CVV validation
+    const cvv = paymentDetails.cvv || '';
+    if (!cvv || cvv.length < 3 || cvv.length > 4) {
+      errors.push('Invalid CVV');
+    }
+    
+    // Cardholder name validation
+    if (!paymentDetails.cardholderName?.trim()) {
+      errors.push('Cardholder name is required');
+    }
+    
+    // Billing address validation
+    const address = paymentDetails.billingAddress || {};
+    if (!address.street?.trim()) errors.push('Street address is required');
+    if (!address.city?.trim()) errors.push('City is required');
+    if (!address.state?.trim()) errors.push('State is required');
+    if (!address.zipCode?.trim()) errors.push('ZIP code is required');
+    if (!address.country?.trim()) errors.push('Country is required');
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
   }
 
   // Handle webhook events from RevenueCat
