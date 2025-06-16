@@ -57,6 +57,15 @@ export function VoiceoverStudio() {
     };
   }, [currentAudio]);
 
+  // Cleanup blob URLs when audioUrl changes
+  useEffect(() => {
+    return () => {
+      if (audioUrl && audioUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
   const checkApiStatus = async () => {
     try {
       const status = elevenLabsService.getConfigStatus();
@@ -142,7 +151,7 @@ export function VoiceoverStudio() {
     }
 
     setLoading(true);
-    setAudioUrl(''); // Clear previous audio
+    // Don't clear audioUrl here to prevent empty src attribute errors
     setCurrentTitle(data.title);
 
     try {
@@ -158,6 +167,12 @@ export function VoiceoverStudio() {
       }
 
       console.log('✅ Voice generation successful!');
+      
+      // Revoke previous blob URL if it exists
+      if (audioUrl && audioUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      
       setAudioUrl(generatedAudioUrl);
       
       // Save to database
