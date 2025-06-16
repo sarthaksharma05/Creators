@@ -21,17 +21,20 @@ import {
   Rocket,
   Target,
   Award,
-  Heart
+  Heart,
+  MessageCircle
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { SpiralAnimation } from '../ui/spiral-animation';
+import { AIChatWidget } from './AIChatWidget';
 
 export function LandingPage() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 300], [0, 100]);
   const y2 = useTransform(scrollY, [0, 300], [0, -100]);
@@ -796,6 +799,27 @@ export function LandingPage() {
           </div>
         </footer>
       </div>
+
+      {/* AI Chat Widget */}
+      <motion.button
+        onClick={() => setIsChatOpen(!isChatOpen)}
+        className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full shadow-2xl hover:shadow-purple-500/25 flex items-center justify-center z-40"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        animate={{ 
+          boxShadow: isChatOpen 
+            ? "0 0 0 0 rgba(139, 92, 246, 0.7)" 
+            : ["0 0 0 0 rgba(139, 92, 246, 0.7)", "0 0 0 20px rgba(139, 92, 246, 0)", "0 0 0 0 rgba(139, 92, 246, 0.7)"]
+        }}
+        transition={{ 
+          duration: isChatOpen ? 0.3 : 2,
+          repeat: isChatOpen ? 0 : Infinity
+        }}
+      >
+        <MessageCircle className="h-8 w-8" />
+      </motion.button>
+
+      <AIChatWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(!isChatOpen)} />
     </div>
   );
 }
