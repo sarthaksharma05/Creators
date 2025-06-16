@@ -127,36 +127,53 @@ export class ElevenLabsService {
 
   private audioBufferToWav(buffer: AudioBuffer): Blob {
     const length = buffer.length;
-    const arrayBuffer = new ArrayBuffer(44 + length * 2);
-    const view = new DataView(arrayBuffer);
-    const channelData = buffer.getChannelData(0);
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const bitsPerSample = 16;
+    const bytesPerSample = bitsPerSample / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = length * blockAlign;
+    const fileSize = 36 + dataSize;
     
-    // WAV header
+    const arrayBuffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(arrayBuffer);
+    
+    // Helper function to write strings
     const writeString = (offset: number, string: string) => {
       for (let i = 0; i < string.length; i++) {
         view.setUint8(offset + i, string.charCodeAt(i));
       }
     };
     
+    // RIFF header
     writeString(0, 'RIFF');
-    view.setUint32(4, 36 + length * 2, true);
+    view.setUint32(4, fileSize, true); // File size - 8
     writeString(8, 'WAVE');
+    
+    // fmt chunk
     writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, buffer.sampleRate, true);
-    view.setUint32(28, buffer.sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
+    view.setUint32(16, 16, true); // fmt chunk size
+    view.setUint16(20, 1, true); // Audio format (1 = PCM)
+    view.setUint16(22, numChannels, true); // Number of channels
+    view.setUint32(24, sampleRate, true); // Sample rate
+    view.setUint32(28, byteRate, true); // Byte rate
+    view.setUint16(32, blockAlign, true); // Block align
+    view.setUint16(34, bitsPerSample, true); // Bits per sample
+    
+    // data chunk
     writeString(36, 'data');
-    view.setUint32(40, length * 2, true);
+    view.setUint32(40, dataSize, true); // Data size
     
     // Convert float samples to 16-bit PCM
     let offset = 44;
+    const channelData = buffer.getChannelData(0);
+    
     for (let i = 0; i < length; i++) {
+      // Clamp sample to [-1, 1] range and convert to 16-bit signed integer
       const sample = Math.max(-1, Math.min(1, channelData[i]));
-      view.setInt16(offset, sample * 0x7FFF, true);
+      const intSample = Math.round(sample * 32767);
+      view.setInt16(offset, intSample, true);
       offset += 2;
     }
     
@@ -168,36 +185,45 @@ export class ElevenLabsService {
     const sampleRate = 22050;
     const duration = 2; // 2 seconds
     const frameCount = sampleRate * duration;
-    const arrayBuffer = new ArrayBuffer(44 + frameCount * 2);
+    const dataSize = frameCount * 2; // 16-bit samples
+    const fileSize = 36 + dataSize;
+    
+    const arrayBuffer = new ArrayBuffer(44 + dataSize);
     const view = new DataView(arrayBuffer);
     
-    // Minimal WAV header
+    // Helper function to write strings
     const writeString = (offset: number, string: string) => {
       for (let i = 0; i < string.length; i++) {
         view.setUint8(offset + i, string.charCodeAt(i));
       }
     };
     
+    // RIFF header
     writeString(0, 'RIFF');
-    view.setUint32(4, 36 + frameCount * 2, true);
+    view.setUint32(4, fileSize, true);
     writeString(8, 'WAVE');
+    
+    // fmt chunk
     writeString(12, 'fmt ');
     view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // Mono
     view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
+    view.setUint32(28, sampleRate * 2, true); // Byte rate
+    view.setUint16(32, 2, true); // Block align
+    view.setUint16(34, 16, true); // Bits per sample
+    
+    // data chunk
     writeString(36, 'data');
-    view.setUint32(40, frameCount * 2, true);
+    view.setUint32(40, dataSize, true);
     
     // Generate simple tone
     let offset = 44;
     for (let i = 0; i < frameCount; i++) {
       const t = i / sampleRate;
       const sample = 0.1 * Math.sin(2 * Math.PI * 440 * t) * Math.exp(-t);
-      view.setInt16(offset, sample * 0x7FFF, true);
+      const intSample = Math.round(sample * 32767);
+      view.setInt16(offset, intSample, true);
       offset += 2;
     }
     
