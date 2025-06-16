@@ -7,13 +7,19 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 relative">
+      {/* Sidebar with proper z-index */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="flex-1 flex flex-col lg:ml-0">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col lg:ml-0 relative">
+        {/* Header with ultra-high z-index */}
+        <div style={{ zIndex: 9999 }}>
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+        </div>
         
-        <main className="flex-1 overflow-y-auto">
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto relative" style={{ zIndex: 1 }}>
           <div className="p-4 lg:p-6">
             <Outlet />
           </div>

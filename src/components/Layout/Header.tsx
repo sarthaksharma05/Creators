@@ -144,7 +144,8 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <motion.header 
-      className="bg-white shadow-sm border-b border-gray-200 relative z-50"
+      className="bg-white shadow-sm border-b border-gray-200 relative"
+      style={{ zIndex: 9999 }} // Ensure header is always on top
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3 }}
@@ -152,13 +153,15 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="absolute inset-0 bg-gradient-to-r from-primary-50/30 to-secondary-50/30"></div>
       <div className="flex h-16 items-center justify-between px-4 lg:px-6 relative z-10">
         <div className="flex items-center space-x-4">
+          {/* Hamburger Menu Button - Always visible with high z-index */}
           <motion.button
             onClick={onMenuClick}
-            className="p-2 rounded-lg hover:bg-gray-100 lg:hidden transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 lg:hidden transition-colors relative"
+            style={{ zIndex: 99999 }} // Ultra high z-index for hamburger menu
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-5 w-5 text-gray-700" />
           </motion.button>
           
           <div className="hidden md:flex items-center space-x-4">
@@ -246,7 +249,8 @@ export function Header({ onMenuClick }: HeaderProps) {
                 <>
                   {/* Mobile backdrop - only show on mobile */}
                   <motion.div 
-                    className="fixed inset-0 bg-black/40 z-[99998] md:hidden"
+                    className="fixed inset-0 bg-black/40 md:hidden"
+                    style={{ zIndex: 999998 }}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}

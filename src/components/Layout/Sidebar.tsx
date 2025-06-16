@@ -103,7 +103,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Mobile overlay */}
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 lg:hidden"
+          style={{ zIndex: 9998 }} // High z-index but below sidebar
           onClick={onClose}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -113,7 +114,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar */}
       <motion.div
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white shadow-xl lg:translate-x-0 lg:static lg:inset-0`}
+        className={`fixed top-0 left-0 h-full w-64 bg-white shadow-xl lg:translate-x-0 lg:static lg:inset-0`}
+        style={{ zIndex: 9999 }} // Ultra high z-index to appear above everything
         variants={sidebarVariants}
         initial="closed"
         animate={isOpen ? "open" : "closed"}
