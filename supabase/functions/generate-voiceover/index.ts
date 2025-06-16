@@ -68,6 +68,14 @@ serve(async (req) => {
       );
     }
     
+    // Validate script length
+    if (script.length > 5000) {
+      return new Response(
+        JSON.stringify({ error: "Script too long. Maximum 5000 characters allowed." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+    
     // Check if the user has reached their usage limit
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -82,9 +90,6 @@ serve(async (req) => {
     // Calculate the estimated minutes for this script (rough estimate: 150 words per minute)
     const wordCount = script.split(/\s+/).length;
     const estimatedMinutes = wordCount / 150;
-    
-    // For now, we'll skip the detailed usage limit check since the profile structure might not have usage_limits
-    // This can be re-enabled once the profile table is properly configured with usage tracking
     
     // Create a record in the database for this voiceover
     const { data: voiceover, error: insertError } = await supabase
@@ -109,6 +114,8 @@ serve(async (req) => {
     
     // Generate the voiceover with ElevenLabs
     console.log(`Generating voiceover with ElevenLabs for voice ${voiceId}`);
+    
+    // Use proper ElevenLabs API settings for high-quality audio
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -121,8 +128,11 @@ serve(async (req) => {
         model_id: 'eleven_monolingual_v1',
         voice_settings: {
           stability: 0.5,
-          similarity_boost: 0.5,
+          similarity_boost: 0.75,
+          style: 0.0,
+          use_speaker_boost: true
         },
+        output_format: 'mp3_44100_128'
       }),
     });
     
@@ -138,9 +148,21 @@ serve(async (req) => {
         })
         .eq('id', voiceover.id);
       
+      let errorMessage = 'Failed to generate voiceover';
+      
+      if (response.status === 401) {
+        errorMessage = 'Invalid ElevenLabs API key. Please check your API key configuration.';
+      } else if (response.status === 402) {
+        errorMessage = 'ElevenLabs account has insufficient credits. Please check your billing.';
+      } else if (response.status === 429) {
+        errorMessage = 'ElevenLabs API rate limit exceeded. Please try again in a few minutes.';
+      } else if (response.status === 422) {
+        errorMessage = 'Invalid voice ID or text content. Please check your input.';
+      }
+      
       return new Response(
         JSON.stringify({ 
-          error: `Failed to generate voiceover`,
+          error: errorMessage,
           details: `ElevenLabs API error: ${response.status} ${response.statusText}. ${errorText}` 
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
@@ -151,13 +173,34 @@ serve(async (req) => {
     const audioData = await response.arrayBuffer();
     console.log(`Generated audio data of size: ${audioData.byteLength} bytes`);
     
+    // Validate that we received actual audio data
+    if (audioData.byteLength < 1000) {
+      console.error('Received suspiciously small audio data:', audioData.byteLength, 'bytes');
+      
+      await supabase
+        .from('voiceovers')
+        .update({
+          status: 'failed'
+        })
+        .eq('id', voiceover.id);
+      
+      return new Response(
+        JSON.stringify({ 
+          error: "Generated audio file is too small or corrupted",
+          details: `Received only ${audioData.byteLength} bytes of audio data` 
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
+    }
+    
     // Upload the audio file to Supabase Storage
     const fileName = `voiceovers/${user.id}/${voiceover.id}.mp3`;
     const { error: uploadError } = await supabase.storage
       .from('audio')
       .upload(fileName, audioData, {
         contentType: 'audio/mpeg',
-        cacheControl: '3600'
+        cacheControl: '3600',
+        upsert: false
       });
     
     if (uploadError) {

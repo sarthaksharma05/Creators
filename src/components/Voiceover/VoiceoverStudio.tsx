@@ -156,6 +156,12 @@ export function VoiceoverStudio() {
       return;
     }
 
+    // Validate script length
+    if (data.script.length > 5000) {
+      toast.error('Script is too long. Maximum 5000 characters allowed.');
+      return;
+    }
+
     setLoading(true);
     setCurrentTitle(data.title);
 
@@ -216,6 +222,14 @@ export function VoiceoverStudio() {
         toast.error('Voice generation is not available. Please contact support.');
       } else if (error.message.includes('Usage limit')) {
         toast.error(error.message);
+      } else if (error.message.includes('Invalid voice ID')) {
+        toast.error('Selected voice is not available. Please try a different voice.');
+      } else if (error.message.includes('Script too long')) {
+        toast.error('Script is too long. Please reduce the text length.');
+      } else if (error.message.includes('insufficient credits')) {
+        toast.error('Voice generation service has insufficient credits. Please contact support.');
+      } else if (error.message.includes('rate limit')) {
+        toast.error('Voice generation rate limit exceeded. Please try again in a few minutes.');
       } else {
         toast.error('Failed to generate voiceover. Please try again or contact support if the issue persists.');
       }
@@ -469,9 +483,10 @@ export function VoiceoverStudio() {
             <div className="flex items-center space-x-3">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
               <div>
-                <h3 className="font-medium text-yellow-800">Voice Generation Not Available</h3>
+                <h3 className="font-medium text-yellow-800">Voice Generation Configuration Required</h3>
                 <p className="text-sm text-yellow-700 mt-1">
-                  ElevenLabs API is not configured on this server. Please contact support to enable professional voice generation.
+                  To use professional voice generation, please configure your ElevenLabs API key in the environment variables. 
+                  Contact your administrator to set up the ELEVENLABS_API_KEY in your Supabase Edge Functions.
                 </p>
               </div>
             </div>
@@ -561,7 +576,7 @@ export function VoiceoverStudio() {
 
           <button
             type="submit"
-            disabled={loading || voices.length === 0 || !isElevenLabsConfigured}
+            disabled={loading || voices.length === 0}
             className="w-full bg-gradient-to-r from-secondary-500 to-cyan-500 text-white py-3 px-4 rounded-lg font-medium hover:from-secondary-600 hover:to-cyan-600 focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             {loading ? (
@@ -569,8 +584,6 @@ export function VoiceoverStudio() {
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span>Generating Voiceover...</span>
               </div>
-            ) : !isElevenLabsConfigured ? (
-              'Voice Generation Unavailable'
             ) : (
               'Generate Voiceover'
             )}
