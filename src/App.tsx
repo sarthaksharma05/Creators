@@ -11,6 +11,7 @@ import { VideoStudio } from './components/Video/VideoStudio';
 import { TrendRadar } from './components/Trends/TrendRadar';
 import { CampaignMarketplace } from './components/Campaigns/CampaignMarketplace';
 import { ProfilePage } from './components/Profile/ProfilePage';
+import { BillingPage } from './components/Billing/BillingPage';
 import { SettingsPage } from './components/Settings/SettingsPage';
 import { AboutPage } from './components/About/AboutPage';
 import { PricingPage } from './components/Pricing/PricingPage';
@@ -92,6 +93,7 @@ function App() {
               <Route path="trends" element={<TrendRadar />} />
               <Route path="campaigns" element={<CampaignMarketplace />} />
               <Route path="profile" element={<ProfilePage />} />
+              <Route path="billing" element={<BillingPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="upgrade" element={<UpgradePage />} />
             </Route>
