@@ -92,26 +92,23 @@ export function Header({ onMenuClick }: HeaderProps) {
     {
       icon: CreditCard,
       label: 'Billing & Plans',
-      href: 'https://billing.creatorcopilot.com',
+      href: '/app/upgrade',
       description: 'Manage subscription',
-      isExternal: true,
-      comingSoon: true
+      isExternal: false
     },
     {
       icon: Shield,
       label: 'Privacy & Security',
-      href: 'https://creatorcopilot.com/privacy',
+      href: '/app/settings',
       description: 'Privacy settings',
-      isExternal: true,
-      comingSoon: true
+      isExternal: false
     },
     {
       icon: HelpCircle,
       label: 'Help & Support',
-      href: 'https://help.creatorcopilot.com',
+      href: '/contact',
       description: 'Get assistance',
-      isExternal: true,
-      comingSoon: true
+      isExternal: false
     },
     {
       icon: Mail,
@@ -317,75 +314,38 @@ export function Header({ onMenuClick }: HeaderProps) {
                     <div className="py-2 max-h-80 overflow-y-auto bg-white/90 backdrop-blur-sm">
                       {dropdownItems.map((item, index) => (
                         <div key={index}>
-                          {item.isExternal ? (
-                            <button
-                              onClick={() => handleDropdownItemClick(item.href, item.isExternal)}
-                              disabled={item.comingSoon}
-                              className={`w-full flex items-center space-x-3 px-4 py-3 text-sm hover:bg-gray-50/80 transition-colors text-left ${
-                                item.highlight ? 'bg-gradient-to-r from-yellow-50/80 to-orange-50/80 border-l-4 border-yellow-400' : ''
-                              } ${item.comingSoon ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                            >
-                              <item.icon className={`h-5 w-5 ${
-                                item.highlight ? 'text-yellow-600' : 'text-gray-500'
-                              }`} />
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-2">
-                                  <p className={`font-medium ${
-                                    item.highlight ? 'text-yellow-900' : 'text-gray-900'
-                                  }`}>
-                                    {item.label}
-                                  </p>
-                                  {item.isExternal && !item.comingSoon && (
-                                    <ExternalLink className="h-3 w-3 text-gray-400" />
-                                  )}
-                                </div>
-                                <p className={`text-xs ${
-                                  item.highlight ? 'text-yellow-700' : 'text-gray-500'
-                                }`}>
-                                  {item.comingSoon ? 'Coming Soon' : item.description}
-                                </p>
-                              </div>
-                              {item.highlight && !item.comingSoon && (
-                                <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-medium">
-                                  Upgrade
-                                </span>
-                              )}
-                              {item.comingSoon && (
-                                <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
-                                  Soon
-                                </span>
-                              )}
-                            </button>
-                          ) : (
-                            <Link
-                              to={item.href}
-                              onClick={() => handleDropdownItemClick(item.href, item.isExternal)}
-                              className={`flex items-center space-x-3 px-4 py-3 text-sm hover:bg-gray-50/80 transition-colors ${
-                                item.highlight ? 'bg-gradient-to-r from-yellow-50/80 to-orange-50/80 border-l-4 border-yellow-400' : ''
-                              }`}
-                            >
-                              <item.icon className={`h-5 w-5 ${
-                                item.highlight ? 'text-yellow-600' : 'text-gray-500'
-                              }`} />
-                              <div className="flex-1">
+                          <button
+                            onClick={() => handleDropdownItemClick(item.href, item.isExternal)}
+                            className={`w-full flex items-center space-x-3 px-4 py-3 text-sm hover:bg-gray-50/80 transition-colors text-left ${
+                              item.highlight ? 'bg-gradient-to-r from-yellow-50/80 to-orange-50/80 border-l-4 border-yellow-400' : ''
+                            }`}
+                          >
+                            <item.icon className={`h-5 w-5 ${
+                              item.highlight ? 'text-yellow-600' : 'text-gray-500'
+                            }`} />
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
                                 <p className={`font-medium ${
                                   item.highlight ? 'text-yellow-900' : 'text-gray-900'
                                 }`}>
                                   {item.label}
                                 </p>
-                                <p className={`text-xs ${
-                                  item.highlight ? 'text-yellow-700' : 'text-gray-500'
-                                }`}>
-                                  {item.description}
-                                </p>
+                                {item.isExternal && (
+                                  <ExternalLink className="h-3 w-3 text-gray-400" />
+                                )}
                               </div>
-                              {item.highlight && (
-                                <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-medium">
-                                  Upgrade
-                                </span>
-                              )}
-                            </Link>
-                          )}
+                              <p className={`text-xs ${
+                                item.highlight ? 'text-yellow-700' : 'text-gray-500'
+                              }`}>
+                                {item.description}
+                              </p>
+                            </div>
+                            {item.highlight && (
+                              <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-medium">
+                                Upgrade
+                              </span>
+                            )}
+                          </button>
                         </div>
                       ))}
                     </div>
