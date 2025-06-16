@@ -126,6 +126,13 @@ export class ElevenLabsService {
   }
 
   private audioBufferToWav(buffer: AudioBuffer): Blob {
+    // Check if the buffer has zero length and return minimal audio if so
+    if (!buffer || buffer.length === 0) {
+      console.warn('AudioBuffer has zero length, creating minimal audio instead');
+      // Create a minimal WAV file blob as fallback
+      return this.createMinimalAudioBlob();
+    }
+
     const length = buffer.length;
     const numChannels = buffer.numberOfChannels;
     const sampleRate = buffer.sampleRate;
@@ -180,8 +187,8 @@ export class ElevenLabsService {
     return new Blob([arrayBuffer], { type: 'audio/wav' });
   }
 
-  private createMinimalAudioDataUrl(): string {
-    // Create a minimal WAV file data URL as fallback
+  private createMinimalAudioBlob(): Blob {
+    // Create a minimal WAV file blob as fallback
     const sampleRate = 22050;
     const duration = 2; // 2 seconds
     const frameCount = sampleRate * duration;
@@ -227,7 +234,11 @@ export class ElevenLabsService {
       offset += 2;
     }
     
-    const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  }
+
+  private createMinimalAudioDataUrl(): string {
+    const blob = this.createMinimalAudioBlob();
     return URL.createObjectURL(blob);
   }
 }
