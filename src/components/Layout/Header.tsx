@@ -255,13 +255,13 @@ export function Header({ onMenuClick }: HeaderProps) {
                     onClick={() => setShowDropdown(false)}
                   />
                   
-                  {/* Dropdown content - Increased opacity and better visibility */}
+                  {/* Dropdown content - Significantly increased z-index */}
                   <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute right-0 top-full mt-2 w-80 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200 py-2 z-[9999] overflow-hidden"
+                    className="absolute right-0 top-full mt-2 w-80 bg-white backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200 py-2 z-[99999] overflow-hidden"
                     style={{ 
                       boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.08)',
                     }}
@@ -311,7 +311,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     </div>
 
                     {/* Menu Items */}
-                    <div className="py-2 max-h-80 overflow-y-auto bg-white/90 backdrop-blur-sm">
+                    <div className="py-2 max-h-80 overflow-y-auto bg-white backdrop-blur-sm">
                       {dropdownItems.map((item, index) => (
                         <div key={index}>
                           <button
@@ -351,7 +351,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     </div>
 
                     {/* Sign Out */}
-                    <div className="border-t border-gray-100 pt-2 bg-white/90 backdrop-blur-sm">
+                    <div className="border-t border-gray-100 pt-2 bg-white backdrop-blur-sm">
                       <button
                         onClick={handleSignOut}
                         className="flex items-center space-x-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50/80 transition-colors w-full"
