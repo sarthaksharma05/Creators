@@ -174,11 +174,7 @@ export function VoiceoverStudio() {
 
       console.log('✅ Voice generation successful!');
       
-      // Revoke previous blob URL if it exists
-      if (audioUrl && audioUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(audioUrl);
-      }
-      
+      // Set the new audio URL - the useEffect will handle cleanup of the previous one
       setAudioUrl(generatedAudioUrl);
       
       // Only save to database if ElevenLabs is properly configured and we have a persistent URL
