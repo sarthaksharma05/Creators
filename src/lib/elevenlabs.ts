@@ -60,12 +60,43 @@ export class ElevenLabsService {
 
   async generateVoice(text: string, voiceId: string): Promise<string> {
     try {
+      // Get the auth token from Supabase
+      const authToken = localStorage.getItem('sb-' + this.supabaseUrl.split('//')[1].split('.')[0] + '-auth-token');
+      let token = '';
+      
+      if (authToken) {
+        try {
+          const authData = JSON.parse(authToken);
+          token = authData.access_token;
+        } catch (e) {
+          console.warn('Failed to parse auth token, trying alternative method');
+        }
+      }
+      
+      // If we couldn't get the token from localStorage, try the alternative method
+      if (!token) {
+        const keys = Object.keys(localStorage);
+        const authKey = keys.find(key => key.includes('supabase.auth.token') || key.includes('-auth-token'));
+        if (authKey) {
+          try {
+            const authData = JSON.parse(localStorage.getItem(authKey) || '{}');
+            token = authData.access_token || authData.token;
+          } catch (e) {
+            console.warn('Failed to parse alternative auth token');
+          }
+        }
+      }
+
+      if (!token) {
+        throw new Error('No authentication token found. Please log in again.');
+      }
+
       // Use Supabase Edge Function to securely generate voice
       const response = await fetch(`${this.supabaseUrl}/functions/v1/generate-voiceover`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           script: text,
@@ -76,21 +107,34 @@ export class ElevenLabsService {
 
       if (!response.ok) {
         const error = await response.json();
+        console.error('Voice generation API error:', error);
         
         // Check if it's a usage limit error
         if (response.status === 403 && error.error === 'Usage limit reached') {
           throw new Error(`${error.message} Current usage: ${error.usage.toFixed(1)}/${error.limit} minutes`);
         }
         
-        throw new Error(error.error || 'Failed to generate voiceover');
+        // Check if it's an API key configuration error
+        if (error.error && error.error.includes('API key not configured')) {
+          throw new Error('ElevenLabs API key is not configured. Please contact support or configure your API key in the Supabase dashboard.');
+        }
+        
+        throw new Error(error.details || error.error || 'Failed to generate voiceover');
       }
 
       const data = await response.json();
+      console.log('Voice generation successful:', data);
       return data.audioUrl;
     } catch (error) {
       console.error('Voice generation error:', error);
       
-      // Fall back to simulation if the API call fails
+      // If the error is about API configuration, don't fall back to simulation
+      if (error.message.includes('API key') || error.message.includes('authentication')) {
+        throw error;
+      }
+      
+      // Fall back to simulation for other errors
+      console.log('Falling back to simulated voice generation');
       return this.simulateVoiceGeneration(text);
     }
   }
