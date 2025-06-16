@@ -198,8 +198,43 @@ export function VoiceoverStudio() {
       });
 
       audio.addEventListener('error', (e) => {
-        console.error('Audio error:', e);
-        toast.error('Failed to load audio. Please try generating again.');
+        console.error('Audio error event:', e);
+        
+        // Get detailed error information
+        const target = e.target as HTMLAudioElement;
+        if (target && target.error) {
+          const errorCode = target.error.code;
+          const errorMessage = target.error.message;
+          
+          console.error('Audio error details:', {
+            code: errorCode,
+            message: errorMessage,
+            src: target.src
+          });
+          
+          // Map error codes to user-friendly messages
+          let userMessage = 'Failed to load audio';
+          switch (errorCode) {
+            case MediaError.MEDIA_ERR_ABORTED:
+              userMessage = 'Audio loading was aborted';
+              break;
+            case MediaError.MEDIA_ERR_NETWORK:
+              userMessage = 'Network error while loading audio';
+              break;
+            case MediaError.MEDIA_ERR_DECODE:
+              userMessage = 'Audio file is corrupted or invalid format';
+              break;
+            case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+              userMessage = 'Audio format not supported by your browser';
+              break;
+          }
+          
+          toast.error(userMessage);
+        } else {
+          console.error('Audio error without detailed information:', e);
+          toast.error('Failed to load audio. Please try generating again.');
+        }
+        
         setIsPlaying(false);
       });
 
