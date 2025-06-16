@@ -20,7 +20,7 @@ export class TavusService {
     }
   }
 
-  // Create AI video with Tavus
+  // Create AI video with Tavus - REAL avatar video generation
   async createVideo(script: string, replicaId: string = 'default-replica', options: any = {}): Promise<{ videoId: string; status: string }> {
     if (!this.isValidKey) {
       console.log('🎬 Simulating Tavus video creation...');
@@ -31,34 +31,36 @@ export class TavusService {
     }
 
     try {
-      console.log('🎬 Creating AI video with Tavus API...');
-      console.log('Script length:', script.length);
-      console.log('Replica ID:', replicaId);
+      console.log('🎬 Creating REAL AI avatar video with Tavus API...');
+      console.log('📝 Script:', script.substring(0, 100) + '...');
+      console.log('🎭 Replica ID:', replicaId);
+      console.log('🎨 Options:', options);
 
+      // Tavus API v2 request structure for AI avatar video generation
       const requestBody = {
+        // Core parameters
         replica_id: replicaId,
         script: script,
         video_name: options.title || `AI Video - ${new Date().toLocaleDateString()}`,
         callback_url: `${window.location.origin}/api/tavus-webhook`,
-        // Remove the properties wrapper and include settings directly at top level
-        video_settings: {
-          quality: 'high',
-          resolution: '1080p',
-          fps: 30
-        },
-        audio_settings: {
-          voice_settings: options.voiceSettings || {
-            speed: 1.0,
-            pitch: 1.0,
-            volume: 1.0
-          }
-        },
+        
+        // Video settings - directly at top level, not in properties
         background: options.background || 'office',
         subtitles: options.subtitles !== false,
-        subtitle_style: options.subtitleStyle || 'modern'
+        subtitle_style: options.subtitleStyle || 'modern',
+        
+        // Voice settings
+        voice_speed: options.voiceSettings?.speed || 1.0,
+        voice_pitch: options.voiceSettings?.pitch || 1.0,
+        voice_volume: options.voiceSettings?.volume || 1.0,
+        
+        // Video quality settings
+        quality: 'high',
+        resolution: '1080p',
+        fps: 30
       };
 
-      console.log('📤 Sending request to Tavus API:', requestBody);
+      console.log('📤 Sending request to Tavus API:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(`${this.baseUrl}/videos`, {
         method: 'POST',
