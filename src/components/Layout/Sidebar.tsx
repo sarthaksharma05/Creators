@@ -104,7 +104,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {isOpen && (
         <motion.div
           className="fixed inset-0 bg-black bg-opacity-50 lg:hidden"
-          style={{ zIndex: 9998 }} // High z-index but below sidebar
+          style={{ zIndex: 999998 }} // High z-index but below sidebar
           onClick={onClose}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -115,7 +115,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Sidebar */}
       <motion.div
         className={`fixed top-0 left-0 h-full w-64 bg-white shadow-xl lg:translate-x-0 lg:static lg:inset-0`}
-        style={{ zIndex: 9999 }} // Ultra high z-index to appear above everything
+        style={{ zIndex: 999999 }} // Ultra high z-index to appear above everything
         variants={sidebarVariants}
         initial="closed"
         animate={isOpen ? "open" : "closed"}

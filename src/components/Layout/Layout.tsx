@@ -13,8 +13,15 @@ export function Layout() {
       
       {/* Main content area */}
       <div className="flex-1 flex flex-col lg:ml-0 relative">
-        {/* Header with ultra-high z-index */}
-        <div style={{ zIndex: 9999 }}>
+        {/* Header with ULTRA-high z-index and fixed positioning for fullscreen */}
+        <div 
+          style={{ 
+            zIndex: 999999,
+            position: 'sticky',
+            top: 0,
+            width: '100%'
+          }}
+        >
           <Header onMenuClick={() => setSidebarOpen(true)} />
         </div>
         
