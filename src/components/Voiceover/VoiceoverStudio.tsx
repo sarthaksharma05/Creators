@@ -31,6 +31,7 @@ export function VoiceoverStudio() {
   const [savedVoiceovers, setSavedVoiceovers] = useState<GeneratedVoiceover[]>([]);
   const [currentTitle, setCurrentTitle] = useState<string>('');
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [isElevenLabsConfigured, setIsElevenLabsConfigured] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<VoiceoverForm>({
@@ -71,6 +72,8 @@ export function VoiceoverStudio() {
       const status = elevenLabsService.getConfigStatus();
       console.log('ElevenLabs API Status:', status);
       
+      setIsElevenLabsConfigured(status.configured);
+      
       if (status.configured) {
         setApiStatus('connected');
       } else {
@@ -79,6 +82,7 @@ export function VoiceoverStudio() {
     } catch (error) {
       console.error('Error checking API status:', error);
       setApiStatus('error');
+      setIsElevenLabsConfigured(false);
     }
   };
 
@@ -113,15 +117,17 @@ export function VoiceoverStudio() {
 
       if (error) throw error;
       
-      // Convert to our interface format
-      const voiceovers: GeneratedVoiceover[] = (data || []).map(item => ({
-        id: item.id,
-        title: item.title,
-        script: item.script,
-        audioUrl: item.audio_url || '',
-        voiceId: item.voice_id,
-        createdAt: item.created_at
-      }));
+      // Convert to our interface format and filter out any with blob URLs
+      const voiceovers: GeneratedVoiceover[] = (data || [])
+        .filter(item => item.audio_url && !item.audio_url.startsWith('blob:'))
+        .map(item => ({
+          id: item.id,
+          title: item.title,
+          script: item.script,
+          audioUrl: item.audio_url || '',
+          voiceId: item.voice_id,
+          createdAt: item.created_at
+        }));
       
       setSavedVoiceovers(voiceovers);
     } catch (error) {
@@ -175,8 +181,8 @@ export function VoiceoverStudio() {
       
       setAudioUrl(generatedAudioUrl);
       
-      // Save to database
-      if (profile) {
+      // Only save to database if ElevenLabs is properly configured and we have a persistent URL
+      if (profile && isElevenLabsConfigured && !generatedAudioUrl.startsWith('blob:')) {
         try {
           const { data: savedVoiceover, error } = await supabase
             .from('voiceovers')
@@ -406,6 +412,12 @@ export function VoiceoverStudio() {
       return;
     }
 
+    // Prevent saving simulated voiceovers (blob URLs) when ElevenLabs is not configured
+    if (!isElevenLabsConfigured && audioUrl.startsWith('blob:')) {
+      toast.error('Cannot save demo voiceovers. Please configure ElevenLabs API to save voiceovers permanently.');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('voiceovers')
@@ -426,6 +438,11 @@ export function VoiceoverStudio() {
       console.error('Save error:', error);
       toast.error('Failed to save voiceover');
     }
+  };
+
+  // Check if current voiceover can be saved
+  const canSaveCurrentVoiceover = () => {
+    return audioUrl && currentTitle && profile && (isElevenLabsConfigured || !audioUrl.startsWith('blob:'));
   };
 
   return (
@@ -556,13 +573,34 @@ export function VoiceoverStudio() {
               </button>
               <button
                 onClick={saveCurrentVoiceover}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Save to library"
+                disabled={!canSaveCurrentVoiceover()}
+                className={`p-2 rounded-lg transition-colors ${
+                  canSaveCurrentVoiceover()
+                    ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                    : 'text-gray-300 cursor-not-allowed'
+                }`}
+                title={
+                  canSaveCurrentVoiceover()
+                    ? 'Save to library'
+                    : 'Cannot save demo voiceovers. Configure ElevenLabs API to save permanently.'
+                }
               >
                 <Save className="h-5 w-5" />
               </button>
             </div>
           </div>
+
+          {/* Show warning for demo voiceovers */}
+          {!isElevenLabsConfigured && audioUrl.startsWith('blob:') && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-yellow-600" />
+                <p className="text-sm text-yellow-800">
+                  This is a demo voiceover. Configure ElevenLabs API to save voiceovers permanently.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="bg-gradient-to-r from-secondary-50 to-cyan-50 rounded-lg p-6">
             <div className="flex items-center space-x-4">
