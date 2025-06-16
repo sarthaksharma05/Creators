@@ -207,6 +207,19 @@ export function LandingPage() {
                 </Link>
               </motion.div>
 
+              {/* Made by bolt.new sticker */}
+              <div className="absolute left-1/2 transform -translate-x-1/2 top-0">
+                <a 
+                  href="https://bolt.new" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs px-3 py-1 rounded-b-lg shadow-md hover:from-blue-700 hover:to-purple-700 transition-all"
+                >
+                  <Zap className="h-3 w-3" />
+                  <span>Made by bolt.new</span>
+                </a>
+              </div>
+
               {/* Desktop Navigation */}
               <nav className="hidden md:flex items-center space-x-8">
                 <a href="#features" className="text-white/80 hover:text-white transition-colors font-medium">Features</a>
@@ -794,6 +807,19 @@ export function LandingPage() {
                     {item}
                   </a>
                 ))}
+              </div>
+              
+              {/* Made by bolt.new sticker in footer */}
+              <div className="mt-4 md:mt-0">
+                <a 
+                  href="https://bolt.new" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs px-3 py-1 rounded-lg shadow-md hover:from-blue-700 hover:to-purple-700 transition-all"
+                >
+                  <Zap className="h-3 w-3" />
+                  <span>Made by bolt.new</span>
+                </a>
               </div>
             </div>
           </div>

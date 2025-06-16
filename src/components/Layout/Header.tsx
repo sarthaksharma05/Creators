@@ -13,7 +13,8 @@ import {
   Shield,
   HelpCircle,
   Mail,
-  ExternalLink
+  ExternalLink,
+  Zap
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -191,6 +192,19 @@ export function Header({ onMenuClick }: HeaderProps) {
               />
             </motion.div>
           </div>
+        </div>
+
+        {/* Made by bolt.new sticker */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 top-0">
+          <a 
+            href="https://bolt.new" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center space-x-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs px-3 py-1 rounded-b-lg shadow-md hover:from-blue-700 hover:to-purple-700 transition-all"
+          >
+            <Zap className="h-3 w-3" />
+            <span>Made by bolt.new</span>
+          </a>
         </div>
 
         <div className="flex items-center space-x-4">
