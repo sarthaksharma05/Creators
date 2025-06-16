@@ -59,9 +59,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     }
 
     // Handle internal navigation
-    if (href.startsWith('/app/')) {
-      navigate(href);
-    } else if (href.startsWith('/')) {
+    if (href.startsWith('/app/') || href.startsWith('/')) {
       navigate(href);
     }
   };
@@ -92,8 +90,8 @@ export function Header({ onMenuClick }: HeaderProps) {
     {
       icon: CreditCard,
       label: 'Billing & Plans',
-      href: '/app/upgrade',
-      description: 'Manage subscription',
+      href: '/app/billing',
+      description: 'Manage subscription & billing',
       isExternal: false
     },
     {
