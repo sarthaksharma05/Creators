@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { Mic, Play, Pause, Download, Save, Volume2, AudioWaveform as Waveform, RefreshCw } from 'lucide-react';
+import { Mic, Play, Pause, Download, Save, Volume2, AudioWaveform as Waveform, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { elevenLabsService } from '../../lib/elevenlabs';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -30,9 +30,10 @@ export function VoiceoverStudio() {
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
   const [savedVoiceovers, setSavedVoiceovers] = useState<GeneratedVoiceover[]>([]);
   const [currentTitle, setCurrentTitle] = useState<string>('');
+  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
-  const { register, handleSubmit, watch, setValue, reset } = useForm<VoiceoverForm>({
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<VoiceoverForm>({
     defaultValues: {
       title: '',
       script: '',
@@ -41,6 +42,7 @@ export function VoiceoverStudio() {
   });
 
   useEffect(() => {
+    checkApiStatus();
     loadVoices();
     loadSavedVoiceovers();
   }, []);
@@ -55,16 +57,36 @@ export function VoiceoverStudio() {
     };
   }, [currentAudio]);
 
-  const loadVoices = async () => {
+  const checkApiStatus = async () => {
     try {
-      const voiceList = await elevenLabsService.getVoices();
-      setVoices(voiceList);
-      if (voiceList.length > 0) {
-        setValue('voiceId', voiceList[0].voice_id);
+      const status = elevenLabsService.getConfigStatus();
+      console.log('ElevenLabs API Status:', status);
+      
+      if (status.configured) {
+        setApiStatus('connected');
+      } else {
+        setApiStatus('error');
       }
     } catch (error) {
-      console.error('Error loading voices:', error);
-      toast.error('Failed to load voices');
+      console.error('Error checking API status:', error);
+      setApiStatus('error');
+    }
+  };
+
+  const loadVoices = async () => {
+    try {
+      console.log('🎤 Loading voices...');
+      const voiceList = await elevenLabsService.getVoices();
+      console.log('✅ Voices loaded:', voiceList.length);
+      setVoices(voiceList);
+      
+      if (voiceList.length > 0) {
+        setValue('voiceId', voiceList[0].voice_id);
+        console.log('✅ Default voice set to:', voiceList[0].name);
+      }
+    } catch (error) {
+      console.error('❌ Error loading voices:', error);
+      toast.error('Failed to load voices. Using default voices.');
     }
   };
 
@@ -114,12 +136,20 @@ export function VoiceoverStudio() {
       return;
     }
 
+    if (!data.voiceId) {
+      toast.error('Please select a voice');
+      return;
+    }
+
     setLoading(true);
     setAudioUrl(''); // Clear previous audio
     setCurrentTitle(data.title);
 
     try {
-      console.log('Generating voiceover with:', { script: data.script, voiceId: data.voiceId });
+      console.log('🎤 Starting voiceover generation...');
+      console.log('Script:', data.script.substring(0, 100) + '...');
+      console.log('Voice ID:', data.voiceId);
+      console.log('Title:', data.title);
       
       const generatedAudioUrl = await elevenLabsService.generateVoice(data.script, data.voiceId);
       
@@ -127,39 +157,42 @@ export function VoiceoverStudio() {
         throw new Error('No audio URL returned from voice generation');
       }
 
-      console.log('Generated audio URL:', generatedAudioUrl);
+      console.log('✅ Voice generation successful!');
       setAudioUrl(generatedAudioUrl);
       
       // Save to database
       if (profile) {
-        const { data: savedVoiceover, error } = await supabase
-          .from('voiceovers')
-          .insert({
-            user_id: profile.id,
-            title: data.title,
-            script: data.script,
-            voice_id: data.voiceId,
-            audio_url: generatedAudioUrl,
-            status: 'completed',
-          })
-          .select()
-          .single();
+        try {
+          const { data: savedVoiceover, error } = await supabase
+            .from('voiceovers')
+            .insert({
+              user_id: profile.id,
+              title: data.title,
+              script: data.script,
+              voice_id: data.voiceId,
+              audio_url: generatedAudioUrl,
+              status: 'completed',
+            })
+            .select()
+            .single();
 
-        if (error) {
-          console.error('Database save error:', error);
-          // Don't throw here, as the audio was generated successfully
-          toast.warning('Voiceover generated but failed to save to history');
-        } else {
-          console.log('Voiceover saved to database:', savedVoiceover);
-          // Reload saved voiceovers
-          loadSavedVoiceovers();
+          if (error) {
+            console.error('Database save error:', error);
+            toast.warning('Voiceover generated but failed to save to history');
+          } else {
+            console.log('✅ Voiceover saved to database');
+            loadSavedVoiceovers();
+          }
+        } catch (dbError) {
+          console.error('Database error:', dbError);
+          // Don't fail the whole operation for database issues
         }
       }
       
-      toast.success('Voiceover generated successfully!');
+      toast.success('🎉 Voiceover generated successfully!');
     } catch (error: any) {
-      console.error('Voiceover generation error:', error);
-      toast.error(error.message || 'Failed to generate voiceover');
+      console.error('❌ Voiceover generation error:', error);
+      toast.error(error.message || 'Failed to generate voiceover. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -179,7 +212,7 @@ export function VoiceoverStudio() {
     }
 
     try {
-      console.log('Attempting to play audio:', url);
+      console.log('🎵 Attempting to play audio:', url.substring(0, 50) + '...');
       
       // Stop current audio if playing
       if (currentAudio) {
@@ -193,19 +226,19 @@ export function VoiceoverStudio() {
       
       // Set up event listeners before setting src
       audio.addEventListener('loadstart', () => {
-        console.log('Audio loading started');
+        console.log('🎵 Audio loading started');
       });
 
       audio.addEventListener('canplay', () => {
-        console.log('Audio can start playing');
+        console.log('🎵 Audio can start playing');
       });
 
       audio.addEventListener('loadeddata', () => {
-        console.log('Audio data loaded');
+        console.log('🎵 Audio data loaded');
       });
 
       audio.addEventListener('error', (e) => {
-        console.error('Audio error event:', e);
+        console.error('❌ Audio error event:', e);
         
         // Get detailed error information
         const target = e.target as HTMLAudioElement;
@@ -213,7 +246,7 @@ export function VoiceoverStudio() {
           const errorCode = target.error.code;
           const errorMessage = target.error.message;
           
-          console.error('Audio error details:', {
+          console.error('❌ Audio error details:', {
             code: errorCode,
             message: errorMessage,
             src: target.src
@@ -238,7 +271,7 @@ export function VoiceoverStudio() {
           
           toast.error(userMessage);
         } else {
-          console.error('Audio error without detailed information:', e);
+          console.error('❌ Audio error without detailed information:', e);
           toast.error('Failed to load audio. Please try generating again.');
         }
         
@@ -246,17 +279,17 @@ export function VoiceoverStudio() {
       });
 
       audio.addEventListener('ended', () => {
-        console.log('Audio playback ended');
+        console.log('🎵 Audio playback ended');
         setIsPlaying(false);
       });
 
       audio.addEventListener('pause', () => {
-        console.log('Audio paused');
+        console.log('🎵 Audio paused');
         setIsPlaying(false);
       });
 
       audio.addEventListener('play', () => {
-        console.log('Audio started playing');
+        console.log('🎵 Audio started playing');
         setIsPlaying(true);
       });
 
@@ -274,20 +307,20 @@ export function VoiceoverStudio() {
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log('Audio playback started successfully');
+            console.log('✅ Audio playback started successfully');
             setIsPlaying(true);
             if (title) {
-              toast.success(`Playing: ${title}`);
+              toast.success(`🎵 Playing: ${title}`);
             }
           })
           .catch((error) => {
-            console.error('Audio play failed:', error);
+            console.error('❌ Audio play failed:', error);
             toast.error('Failed to play audio. Please check your browser settings.');
             setIsPlaying(false);
           });
       }
     } catch (error) {
-      console.error('Play audio error:', error);
+      console.error('❌ Play audio error:', error);
       toast.error('Unable to play audio');
       setIsPlaying(false);
     }
@@ -314,7 +347,7 @@ export function VoiceoverStudio() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success('Download started!');
+      toast.success('📥 Download started!');
     } catch (error) {
       console.error('Download error:', error);
       toast.error('Failed to download audio');
@@ -341,7 +374,7 @@ export function VoiceoverStudio() {
 
       if (error) throw error;
       
-      toast.success('Voiceover saved successfully!');
+      toast.success('💾 Voiceover saved successfully!');
       loadSavedVoiceovers();
     } catch (error) {
       console.error('Save error:', error);
@@ -358,7 +391,41 @@ export function VoiceoverStudio() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Voiceover Studio</h1>
-            <p className="text-gray-600">Transform text into professional voiceovers</p>
+            <p className="text-gray-600">Transform text into professional voiceovers with ElevenLabs</p>
+          </div>
+        </div>
+
+        {/* API Status Indicator */}
+        <div className="mb-6">
+          <div className={`flex items-center space-x-2 p-3 rounded-lg ${
+            apiStatus === 'connected' 
+              ? 'bg-green-50 border border-green-200' 
+              : apiStatus === 'error'
+              ? 'bg-red-50 border border-red-200'
+              : 'bg-yellow-50 border border-yellow-200'
+          }`}>
+            {apiStatus === 'connected' && <CheckCircle className="h-5 w-5 text-green-600" />}
+            {apiStatus === 'error' && <AlertCircle className="h-5 w-5 text-red-600" />}
+            {apiStatus === 'checking' && <RefreshCw className="h-5 w-5 text-yellow-600 animate-spin" />}
+            
+            <div>
+              <p className={`font-medium ${
+                apiStatus === 'connected' ? 'text-green-800' : 
+                apiStatus === 'error' ? 'text-red-800' : 'text-yellow-800'
+              }`}>
+                {apiStatus === 'connected' && 'ElevenLabs API Connected'}
+                {apiStatus === 'error' && 'ElevenLabs API Not Connected'}
+                {apiStatus === 'checking' && 'Checking ElevenLabs API...'}
+              </p>
+              <p className={`text-sm ${
+                apiStatus === 'connected' ? 'text-green-600' : 
+                apiStatus === 'error' ? 'text-red-600' : 'text-yellow-600'
+              }`}>
+                {apiStatus === 'connected' && 'Ready to generate high-quality voiceovers'}
+                {apiStatus === 'error' && 'Using simulated voice generation for demo'}
+                {apiStatus === 'checking' && 'Verifying API connection...'}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -373,6 +440,9 @@ export function VoiceoverStudio() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="Enter a title for your voiceover..."
             />
+            {errors.title && (
+              <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+            )}
           </div>
 
           <div>
@@ -380,48 +450,69 @@ export function VoiceoverStudio() {
               Script *
             </label>
             <textarea
-              {...register('script', { required: 'Script is required' })}
+              {...register('script', { 
+                required: 'Script is required',
+                minLength: { value: 10, message: 'Script must be at least 10 characters' },
+                maxLength: { value: 5000, message: 'Script must be less than 5000 characters' }
+              })}
               rows={6}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="Enter the text you want to convert to speech..."
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Character count: {watch('script')?.length || 0} (recommended: 50-500 characters)
-            </p>
+            <div className="flex justify-between mt-1">
+              {errors.script && (
+                <p className="text-sm text-red-600">{errors.script.message}</p>
+              )}
+              <p className="text-xs text-gray-500 ml-auto">
+                Character count: {watch('script')?.length || 0} / 5000
+              </p>
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Voice Selection
             </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {voices.map((voice) => (
-                <label key={voice.voice_id} className="relative">
-                  <input
-                    {...register('voiceId')}
-                    type="radio"
-                    value={voice.voice_id}
-                    className="sr-only peer"
-                  />
-                  <div className="flex items-center p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-primary-300 peer-checked:border-primary-500 peer-checked:bg-primary-50 transition-all">
-                    <Volume2 className="h-5 w-5 text-gray-400 peer-checked:text-primary-600 mr-3" />
-                    <div>
-                      <div className="font-medium text-gray-900 peer-checked:text-primary-900">
-                        {voice.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {voice.category || 'AI Voice'}
+            {voices.length === 0 ? (
+              <div className="flex items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-lg">
+                <div className="text-center">
+                  <RefreshCw className="h-8 w-8 text-gray-400 mx-auto mb-2 animate-spin" />
+                  <p className="text-gray-500">Loading voices...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {voices.map((voice) => (
+                  <label key={voice.voice_id} className="relative">
+                    <input
+                      {...register('voiceId', { required: 'Please select a voice' })}
+                      type="radio"
+                      value={voice.voice_id}
+                      className="sr-only peer"
+                    />
+                    <div className="flex items-center p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-primary-300 peer-checked:border-primary-500 peer-checked:bg-primary-50 transition-all">
+                      <Volume2 className="h-5 w-5 text-gray-400 peer-checked:text-primary-600 mr-3" />
+                      <div>
+                        <div className="font-medium text-gray-900 peer-checked:text-primary-900">
+                          {voice.name}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {voice.category || voice.description || 'AI Voice'}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </label>
-              ))}
-            </div>
+                  </label>
+                ))}
+              </div>
+            )}
+            {errors.voiceId && (
+              <p className="mt-1 text-sm text-red-600">{errors.voiceId.message}</p>
+            )}
           </div>
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || voices.length === 0}
             className="w-full bg-gradient-to-r from-secondary-500 to-cyan-500 text-white py-3 px-4 rounded-lg font-medium hover:from-secondary-600 hover:to-cyan-600 focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             {loading ? (
