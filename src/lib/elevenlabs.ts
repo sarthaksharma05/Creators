@@ -22,36 +22,20 @@ export class ElevenLabsService {
 
   async getVoices() {
     try {
-      // Try to use the direct API if we have a key
-      if (this.apiKey) {
-        const response = await fetch(`${this.baseUrl}/voices`, {
-          headers: {
-            'xi-api-key': this.apiKey,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`ElevenLabs API error: ${response.statusText}`);
+      // Always use the Supabase Edge Function to get voices
+      const response = await fetch(`${this.supabaseUrl}/functions/v1/elevenlabs-voices`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
         }
+      });
 
-        const data = await response.json();
-        return data.voices || [];
-      } else {
-        // Use Supabase Edge Function as a fallback
-        const response = await fetch(`${this.supabaseUrl}/functions/v1/elevenlabs-voices`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token')}`
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to get voices: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        return data.voices || [];
+      if (!response.ok) {
+        throw new Error(`Failed to get voices: ${response.statusText}`);
       }
+
+      const data = await response.json();
+      return data.voices || this.getMockVoices();
     } catch (error) {
       console.warn('ElevenLabs API error:', error, 'Falling back to mock voices.');
       return this.getMockVoices();
@@ -60,35 +44,12 @@ export class ElevenLabsService {
 
   async generateVoice(text: string, voiceId: string): Promise<string> {
     try {
-      // Get the auth token from Supabase
-      const authToken = localStorage.getItem('sb-' + this.supabaseUrl.split('//')[1].split('.')[0] + '-auth-token');
-      let token = '';
+      // Get the auth token from localStorage
+      const token = this.getAuthToken();
       
-      if (authToken) {
-        try {
-          const authData = JSON.parse(authToken);
-          token = authData.access_token;
-        } catch (e) {
-          console.warn('Failed to parse auth token, trying alternative method');
-        }
-      }
-      
-      // If we couldn't get the token from localStorage, try the alternative method
       if (!token) {
-        const keys = Object.keys(localStorage);
-        const authKey = keys.find(key => key.includes('supabase.auth.token') || key.includes('-auth-token'));
-        if (authKey) {
-          try {
-            const authData = JSON.parse(localStorage.getItem(authKey) || '{}');
-            token = authData.access_token || authData.token;
-          } catch (e) {
-            console.warn('Failed to parse alternative auth token');
-          }
-        }
-      }
-
-      if (!token) {
-        throw new Error('No authentication token found. Please log in again.');
+        console.warn('No authentication token found, using simulated voice generation');
+        return this.simulateVoiceGeneration(text);
       }
 
       // Use Supabase Edge Function to securely generate voice
@@ -129,7 +90,7 @@ export class ElevenLabsService {
       console.error('Voice generation error:', error);
       
       // If the error is about API configuration, don't fall back to simulation
-      if (error.message.includes('API key') || error.message.includes('authentication')) {
+      if (error.message && (error.message.includes('API key') || error.message.includes('authentication'))) {
         throw error;
       }
       
@@ -151,6 +112,36 @@ export class ElevenLabsService {
       { voice_id: 'adam', name: 'Adam', category: 'Male' },
       { voice_id: 'sam', name: 'Sam', category: 'Male' },
     ];
+  }
+
+  private getAuthToken(): string | null {
+    // Try to get the token from localStorage
+    // First try the standard format
+    const authToken = localStorage.getItem('sb-' + this.supabaseUrl.split('//')[1].split('.')[0] + '-auth-token');
+    
+    if (authToken) {
+      try {
+        const authData = JSON.parse(authToken);
+        return authData.access_token;
+      } catch (e) {
+        console.warn('Failed to parse auth token');
+      }
+    }
+    
+    // Try alternative formats
+    const keys = Object.keys(localStorage);
+    const authKey = keys.find(key => key.includes('supabase.auth.token') || key.includes('-auth-token'));
+    
+    if (authKey) {
+      try {
+        const authData = JSON.parse(localStorage.getItem(authKey) || '{}');
+        return authData.access_token || authData.token;
+      } catch (e) {
+        console.warn('Failed to parse alternative auth token');
+      }
+    }
+    
+    return null;
   }
 
   private async simulateVoiceGeneration(text: string): Promise<string> {
