@@ -111,16 +111,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         />
       )}
 
-      {/* Sidebar - Always visible on desktop, toggleable on mobile */}
+      {/* Sidebar */}
       <motion.div
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white shadow-xl lg:relative lg:translate-x-0 lg:z-auto`}
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white shadow-xl lg:translate-x-0 lg:static lg:inset-0`}
         variants={sidebarVariants}
         initial="closed"
         animate={isOpen ? "open" : "closed"}
-        style={{
-          // On desktop (lg and up), always show the sidebar
-          transform: window.innerWidth >= 1024 ? 'translateX(0)' : undefined
-        }}
       >
         <div className="flex h-full flex-col">
           {/* Header */}
