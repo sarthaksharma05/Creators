@@ -12,6 +12,7 @@ import { TrendRadar } from './components/Trends/TrendRadar';
 import { CampaignMarketplace } from './components/Campaigns/CampaignMarketplace';
 import { ProfilePage } from './components/Profile/ProfilePage';
 import { BillingPage } from './components/Billing/BillingPage';
+import { CheckoutPage } from './components/Checkout/CheckoutPage';
 import { SettingsPage } from './components/Settings/SettingsPage';
 import { AboutPage } from './components/About/AboutPage';
 import { PricingPage } from './components/Pricing/PricingPage';
@@ -81,6 +82,18 @@ function App() {
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/upgrade" element={<UpgradePage />} />
+          
+          {/* Checkout Route - Accessible to authenticated users */}
+          <Route 
+            path="/checkout" 
+            element={
+              isAuthenticated ? (
+                <CheckoutPage />
+              ) : (
+                <Navigate to="/auth" replace />
+              )
+            } 
+          />
           
           {/* Protected Routes - Only for authenticated users */}
           {isAuthenticated ? (

@@ -4,7 +4,6 @@ import { ArrowLeft, Crown, Zap, Star, Check, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Pricing } from '@/components/ui/pricing';
 import { useAuth } from '../../hooks/useAuth';
-import toast from 'react-hot-toast';
 
 const creatorCopilotPlans = [
   {
@@ -102,39 +101,17 @@ const proFeatures = [
 ];
 
 export function UpgradePage() {
-  const { profile, updateProfile } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
 
-  const handleUpgrade = async (planName: string) => {
+  const handleUpgrade = async (planName: string, billingCycle: 'monthly' | 'yearly' = 'monthly') => {
     if (planName === 'CREATOR PRO') {
-      try {
-        // Show loading state
-        toast.loading('Processing upgrade...', { id: 'upgrade' });
-        
-        // Simulate payment processing
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Update user profile to Pro
-        if (profile) {
-          await updateProfile({ is_pro: true });
-        }
-        
-        // Show success message
-        toast.success('🎉 Welcome to Creator Pro! All features unlocked!', { 
-          id: 'upgrade',
-          duration: 4000 
-        });
-        
-        // Redirect to billing page instead of dashboard
-        setTimeout(() => {
-          navigate('/app/billing');
-        }, 1500);
-        
-      } catch (error) {
-        toast.error('Upgrade failed. Please try again.', { id: 'upgrade' });
-      }
+      // Redirect to checkout page with plan details
+      const planId = 'creator_pro';
+      navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
     } else if (planName === 'CREATOR STUDIO') {
-      navigate('/contact');
+      const planId = 'creator_studio';
+      navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
     }
   };
 
