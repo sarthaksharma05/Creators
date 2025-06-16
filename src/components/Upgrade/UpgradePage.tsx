@@ -125,9 +125,9 @@ export function UpgradePage() {
           duration: 4000 
         });
         
-        // Redirect to dashboard after a short delay
+        // Redirect to billing page instead of dashboard
         setTimeout(() => {
-          navigate('/app/dashboard');
+          navigate('/app/billing');
         }, 1500);
         
       } catch (error) {
@@ -244,9 +244,18 @@ export function UpgradePage() {
                       You're currently on the free plan. Upgrade to unlock unlimited features!
                     </p>
                   ) : (
-                    <p className="text-green-300 mb-4">
-                      🎉 You're a Pro member! Enjoy unlimited access to all features.
-                    </p>
+                    <div>
+                      <p className="text-green-300 mb-4">
+                        🎉 You're a Pro member! Enjoy unlimited access to all features.
+                      </p>
+                      <Link
+                        to="/app/billing"
+                        className="inline-flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg hover:bg-white/30 transition-colors text-white"
+                      >
+                        <span>Manage Billing</span>
+                        <ArrowLeft className="h-4 w-4 rotate-180" />
+                      </Link>
+                    </div>
                   )}
                 </div>
               </motion.div>
