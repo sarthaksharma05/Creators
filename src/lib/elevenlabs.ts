@@ -2,11 +2,14 @@
 export class ElevenLabsService {
   private apiKey: string;
   private baseUrl = 'https://api.elevenlabs.io/v1';
+  private supabaseUrl: string;
 
   constructor() {
-    this.apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+    this.apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY || '';
+    this.supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    
     if (!this.apiKey) {
-      console.warn('ElevenLabs API key not found. Voice generation will be simulated.');
+      console.warn('ElevenLabs API key not found. Voice generation will use Supabase Edge Functions.');
     }
   }
 
@@ -18,24 +21,37 @@ export class ElevenLabsService {
   }
 
   async getVoices() {
-    if (!this.apiKey) {
-      return this.getMockVoices();
-    }
-
     try {
-      const response = await fetch(`${this.baseUrl}/voices`, {
-        headers: {
-          'xi-api-key': this.apiKey,
-        },
-      });
+      // Try to use the direct API if we have a key
+      if (this.apiKey) {
+        const response = await fetch(`${this.baseUrl}/voices`, {
+          headers: {
+            'xi-api-key': this.apiKey,
+          },
+        });
 
-      if (!response.ok) {
-        console.warn(`ElevenLabs API error: ${response.statusText}. Falling back to mock voices.`);
-        return this.getMockVoices();
+        if (!response.ok) {
+          throw new Error(`ElevenLabs API error: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data.voices || [];
+      } else {
+        // Use Supabase Edge Function as a fallback
+        const response = await fetch(`${this.supabaseUrl}/functions/v1/elevenlabs-voices`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token')}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to get voices: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data.voices || [];
       }
-
-      const data = await response.json();
-      return data.voices || [];
     } catch (error) {
       console.warn('ElevenLabs API error:', error, 'Falling back to mock voices.');
       return this.getMockVoices();
@@ -43,38 +59,38 @@ export class ElevenLabsService {
   }
 
   async generateVoice(text: string, voiceId: string): Promise<string> {
-    if (!this.apiKey) {
-      console.log('No ElevenLabs API key found. Using simulated voice generation.');
-      return this.simulateVoiceGeneration(text);
-    }
-
     try {
-      const response = await fetch(`${this.baseUrl}/text-to-speech/${voiceId}`, {
+      // Use Supabase Edge Function to securely generate voice
+      const response = await fetch(`${this.supabaseUrl}/functions/v1/generate-voiceover`, {
         method: 'POST',
         headers: {
-          'Accept': 'audio/mpeg',
           'Content-Type': 'application/json',
-          'xi-api-key': this.apiKey,
+          'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token')}`
         },
         body: JSON.stringify({
-          text,
-          model_id: 'eleven_monolingual_v1',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.5,
-          },
-        }),
+          script: text,
+          voiceId,
+          title: `Voiceover - ${new Date().toLocaleDateString()}`
+        })
       });
 
       if (!response.ok) {
-        console.warn(`ElevenLabs API error: ${response.statusText}. Using simulated voice generation.`);
-        return this.simulateVoiceGeneration(text);
+        const error = await response.json();
+        
+        // Check if it's a usage limit error
+        if (response.status === 403 && error.error === 'Usage limit reached') {
+          throw new Error(`${error.message} Current usage: ${error.usage.toFixed(1)}/${error.limit} minutes`);
+        }
+        
+        throw new Error(error.error || 'Failed to generate voiceover');
       }
 
-      const audioBlob = await response.blob();
-      return URL.createObjectURL(audioBlob);
+      const data = await response.json();
+      return data.audioUrl;
     } catch (error) {
-      console.warn('Voice generation error:', error, 'Using simulated voice generation.');
+      console.error('Voice generation error:', error);
+      
+      // Fall back to simulation if the API call fails
       return this.simulateVoiceGeneration(text);
     }
   }

@@ -20,30 +20,11 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { revenueCatService } from '../../lib/revenuecat';
+import { stripeService } from '../../lib/stripe';
 import toast from 'react-hot-toast';
 
 interface CheckoutFormData {
-  // Payment Details
-  cardNumber: string;
-  expiryDate: string;
-  cvv: string;
-  cardholderName: string;
-  
-  // Billing Address
-  billingAddress: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
-  
-  // Contact Info
   email: string;
-  phone?: string;
-  
-  // Plan Selection
   planId: string;
   billingCycle: 'monthly' | 'yearly';
 }
@@ -87,37 +68,20 @@ const plans = [
   }
 ];
 
-const countries = [
-  { code: 'US', name: 'United States' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'FR', name: 'France' },
-  { code: 'IN', name: 'India' },
-  { code: 'JP', name: 'Japan' },
-  { code: 'BR', name: 'Brazil' },
-  { code: 'MX', name: 'Mexico' }
-];
-
 export function CheckoutPage() {
-  const { profile, updateProfile } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(plans[0]);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [step, setStep] = useState(1); // 1: Plan Selection, 2: Payment Details, 3: Confirmation
-  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [redirectingToStripe, setRedirectingToStripe] = useState(false);
   
   const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm<CheckoutFormData>({
     defaultValues: {
       email: profile?.email || '',
       planId: searchParams.get('plan') || 'creator_pro',
       billingCycle: (searchParams.get('cycle') as 'monthly' | 'yearly') || 'monthly',
-      billingAddress: {
-        country: 'US'
-      }
     }
   });
 
@@ -142,74 +106,23 @@ export function CheckoutPage() {
     return monthlyTotal - yearlyPrice;
   };
 
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = matches && matches[0] || '';
-    const parts = [];
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-    if (parts.length) {
-      return parts.join(' ');
-    } else {
-      return v;
-    }
-  };
-
-  const formatExpiryDate = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return v.substring(0, 2) + '/' + v.substring(2, 4);
-    }
-    return v;
-  };
-
   const onSubmit = async (data: CheckoutFormData) => {
-    if (step < 3) {
-      setStep(step + 1);
-      return;
-    }
-
-    setPaymentProcessing(true);
+    setLoading(true);
     try {
-      // Validate payment details
-      const validation = revenueCatService.validatePaymentDetails(data);
-      if (!validation.isValid) {
-        toast.error(validation.errors[0]);
-        setPaymentProcessing(false);
-        return;
-      }
-
-      // Process payment through RevenueCat
-      const paymentSuccess = await revenueCatService.processPayment(data, getCurrentPrice());
+      // Get the Stripe price ID based on the selected plan and billing cycle
+      const priceId = `price_${data.planId}_${data.billingCycle}`;
       
-      if (paymentSuccess) {
-        // Purchase the plan
-        const purchaseSuccess = await revenueCatService.purchasePlan(
-          `${data.planId}_${data.billingCycle}`,
-          data.billingCycle
-        );
-
-        if (purchaseSuccess) {
-          // Update user profile to Pro
-          if (profile) {
-            await updateProfile({ is_pro: true });
-          }
-
-          toast.success('🎉 Welcome to Creator Pro! Your subscription is now active.');
-          
-          // Redirect to dashboard after successful purchase
-          setTimeout(() => {
-            navigate('/app/dashboard');
-          }, 2000);
-        }
-      }
+      // Create a checkout session with Stripe
+      setRedirectingToStripe(true);
+      const checkoutUrl = await stripeService.createCheckoutSession(priceId);
+      
+      // Redirect to Stripe Checkout
+      window.location.href = checkoutUrl;
     } catch (error: any) {
       console.error('Checkout error:', error);
       toast.error(error.message || 'Payment failed. Please try again.');
-    } finally {
-      setPaymentProcessing(false);
+      setRedirectingToStripe(false);
+      setLoading(false);
     }
   };
 
@@ -379,342 +292,82 @@ export function CheckoutPage() {
             variants={itemVariants}
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Payment Details</h2>
-              <div className="flex items-center space-x-2">
-                {[1, 2, 3].map((stepNumber) => (
-                  <div
-                    key={stepNumber}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      step >= stepNumber
-                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
-                        : 'bg-white/20 text-purple-300'
-                    }`}
-                  >
-                    {stepNumber}
-                  </div>
-                ))}
-              </div>
+              <h2 className="text-2xl font-bold text-white">Complete Your Purchase</h2>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              {step === 1 && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="space-y-6"
-                >
-                  <h3 className="text-lg font-semibold text-white">Contact Information</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-white font-medium mb-2">
-                        Email Address *
-                      </label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-purple-300" />
-                        <input
-                          {...register('email', { 
-                            required: 'Email is required',
-                            pattern: {
-                              value: /^\S+@\S+$/i,
-                              message: 'Invalid email address'
-                            }
-                          })}
-                          type="email"
-                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="your@email.com"
-                        />
-                      </div>
-                      {errors.email && (
-                        <p className="mt-1 text-sm text-red-400">{errors.email.message}</p>
-                      )}
-                    </div>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                <h3 className="text-lg font-semibold text-white">Contact Information</h3>
+                
+                <div>
+                  <label className="block text-white font-medium mb-2">
+                    Email Address *
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-purple-300" />
+                    <input
+                      {...register('email', { 
+                        required: 'Email is required',
+                        pattern: {
+                          value: /^\S+@\S+$/i,
+                          message: 'Invalid email address'
+                        }
+                      })}
+                      type="email"
+                      className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
+                      placeholder="your@email.com"
+                    />
+                  </div>
+                  {errors.email && (
+                    <p className="mt-1 text-sm text-red-400">{errors.email.message}</p>
+                  )}
+                </div>
 
+                <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle className="h-5 w-5 text-blue-400 mt-0.5" />
                     <div>
-                      <label className="block text-white font-medium mb-2">
-                        Phone Number (Optional)
-                      </label>
-                      <input
-                        {...register('phone')}
-                        type="tel"
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                        placeholder="+1 (555) 123-4567"
-                      />
+                      <p className="text-blue-200 text-sm">
+                        You'll be redirected to our secure payment processor to complete your purchase. 
+                        Your subscription will begin immediately after payment.
+                      </p>
                     </div>
                   </div>
-                </motion.div>
-              )}
+                </div>
 
-              {step === 2 && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="space-y-6"
-                >
-                  <h3 className="text-lg font-semibold text-white">Payment Information</h3>
-                  
-                  {/* Card Details */}
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-white font-medium mb-2">
-                        Card Number *
-                      </label>
-                      <div className="relative">
-                        <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-purple-300" />
-                        <input
-                          {...register('cardNumber', { 
-                            required: 'Card number is required',
-                            onChange: (e) => {
-                              e.target.value = formatCardNumber(e.target.value);
-                            }
-                          })}
-                          type="text"
-                          maxLength={19}
-                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="1234 5678 9012 3456"
-                        />
-                      </div>
-                      {errors.cardNumber && (
-                        <p className="mt-1 text-sm text-red-400">{errors.cardNumber.message}</p>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-white font-medium mb-2">
-                          Expiry Date *
-                        </label>
-                        <input
-                          {...register('expiryDate', { 
-                            required: 'Expiry date is required',
-                            onChange: (e) => {
-                              e.target.value = formatExpiryDate(e.target.value);
-                            }
-                          })}
-                          type="text"
-                          maxLength={5}
-                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="MM/YY"
-                        />
-                        {errors.expiryDate && (
-                          <p className="mt-1 text-sm text-red-400">{errors.expiryDate.message}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-white font-medium mb-2">
-                          CVV *
-                        </label>
-                        <input
-                          {...register('cvv', { 
-                            required: 'CVV is required',
-                            minLength: { value: 3, message: 'CVV must be 3-4 digits' },
-                            maxLength: { value: 4, message: 'CVV must be 3-4 digits' }
-                          })}
-                          type="text"
-                          maxLength={4}
-                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="123"
-                        />
-                        {errors.cvv && (
-                          <p className="mt-1 text-sm text-red-400">{errors.cvv.message}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-white font-medium mb-2">
-                        Cardholder Name *
-                      </label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-purple-300" />
-                        <input
-                          {...register('cardholderName', { required: 'Cardholder name is required' })}
-                          type="text"
-                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="John Doe"
-                        />
-                      </div>
-                      {errors.cardholderName && (
-                        <p className="mt-1 text-sm text-red-400">{errors.cardholderName.message}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Billing Address */}
-                  <div className="space-y-4">
-                    <h4 className="text-lg font-semibold text-white">Billing Address</h4>
-                    
-                    <div>
-                      <label className="block text-white font-medium mb-2">
-                        Street Address *
-                      </label>
-                      <input
-                        {...register('billingAddress.street', { required: 'Street address is required' })}
-                        type="text"
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                        placeholder="123 Main Street"
-                      />
-                      {errors.billingAddress?.street && (
-                        <p className="mt-1 text-sm text-red-400">{errors.billingAddress.street.message}</p>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-white font-medium mb-2">
-                          City *
-                        </label>
-                        <input
-                          {...register('billingAddress.city', { required: 'City is required' })}
-                          type="text"
-                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="New York"
-                        />
-                        {errors.billingAddress?.city && (
-                          <p className="mt-1 text-sm text-red-400">{errors.billingAddress.city.message}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-white font-medium mb-2">
-                          State/Province *
-                        </label>
-                        <input
-                          {...register('billingAddress.state', { required: 'State is required' })}
-                          type="text"
-                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="NY"
-                        />
-                        {errors.billingAddress?.state && (
-                          <p className="mt-1 text-sm text-red-400">{errors.billingAddress.state.message}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-white font-medium mb-2">
-                          ZIP/Postal Code *
-                        </label>
-                        <input
-                          {...register('billingAddress.zipCode', { required: 'ZIP code is required' })}
-                          type="text"
-                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                          placeholder="10001"
-                        />
-                        {errors.billingAddress?.zipCode && (
-                          <p className="mt-1 text-sm text-red-400">{errors.billingAddress.zipCode.message}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-white font-medium mb-2">
-                          Country *
-                        </label>
-                        <select
-                          {...register('billingAddress.country', { required: 'Country is required' })}
-                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
-                        >
-                          {countries.map((country) => (
-                            <option key={country.code} value={country.code} className="bg-gray-800">
-                              {country.name}
-                            </option>
-                          ))}
-                        </select>
-                        {errors.billingAddress?.country && (
-                          <p className="mt-1 text-sm text-red-400">{errors.billingAddress.country.message}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {step === 3 && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="space-y-6"
-                >
-                  <h3 className="text-lg font-semibold text-white">Review & Confirm</h3>
-                  
-                  <div className="bg-white/5 rounded-lg p-6 space-y-4">
-                    <div className="flex justify-between">
-                      <span className="text-purple-200">Plan:</span>
-                      <span className="text-white font-semibold">{selectedPlan.name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-purple-200">Billing:</span>
-                      <span className="text-white font-semibold capitalize">{billingCycle}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-purple-200">Email:</span>
-                      <span className="text-white font-semibold">{watch('email')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-purple-200">Payment Method:</span>
-                      <span className="text-white font-semibold">
-                        •••• •••• •••• {watch('cardNumber')?.slice(-4)}
-                      </span>
-                    </div>
-                    <div className="border-t border-white/20 pt-4">
-                      <div className="flex justify-between text-xl font-bold">
-                        <span className="text-white">Total:</span>
-                        <span className="text-white">${getCurrentPrice()}.00</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
-                    <div className="flex items-start space-x-3">
-                      <AlertCircle className="h-5 w-5 text-blue-400 mt-0.5" />
-                      <div>
-                        <p className="text-blue-200 text-sm">
-                          By completing this purchase, you agree to our Terms of Service and Privacy Policy. 
-                          Your subscription will automatically renew unless cancelled.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Navigation Buttons */}
-              <div className="flex justify-between pt-6">
-                {step > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setStep(step - 1)}
+                {/* Navigation Buttons */}
+                <div className="flex justify-between pt-6">
+                  <Link
+                    to="/app/upgrade"
                     className="flex items-center space-x-2 bg-white/10 text-white px-6 py-3 rounded-lg font-medium hover:bg-white/20 transition-all"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     <span>Back</span>
+                  </Link>
+                  
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex items-center space-x-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {redirectingToStripe ? (
+                      <>
+                        <Loader className="h-5 w-5 animate-spin" />
+                        <span>Redirecting to Secure Checkout...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="h-4 w-4" />
+                        <span>Proceed to Payment</span>
+                      </>
+                    )}
                   </button>
-                )}
-                
-                <button
-                  type="submit"
-                  disabled={paymentProcessing}
-                  className={`flex items-center space-x-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
-                    step === 1 ? 'ml-auto' : ''
-                  }`}
-                >
-                  {paymentProcessing ? (
-                    <>
-                      <Loader className="h-5 w-5 animate-spin" />
-                      <span>Processing...</span>
-                    </>
-                  ) : step === 3 ? (
-                    <>
-                      <Lock className="h-4 w-4" />
-                      <span>Complete Purchase</span>
-                    </>
-                  ) : (
-                    <span>Continue</span>
-                  )}
-                </button>
-              </div>
+                </div>
+              </motion.div>
             </form>
 
             {/* Security Footer */}

@@ -2,8 +2,9 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Crown, Zap, Star, Check, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Pricing } from '@/components/ui/pricing';
 import { useAuth } from '../../hooks/useAuth';
+import { stripeService } from '../../lib/stripe';
+import toast from 'react-hot-toast';
 
 const creatorCopilotPlans = [
   {
@@ -103,15 +104,31 @@ const proFeatures = [
 export function UpgradePage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const [redirectingToCheckout, setRedirectingToCheckout] = useState(false);
 
   const handleUpgrade = async (planName: string, billingCycle: 'monthly' | 'yearly' = 'monthly') => {
-    if (planName === 'CREATOR PRO') {
-      // Redirect to checkout page with plan details
-      const planId = 'creator_pro';
-      navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
-    } else if (planName === 'CREATOR STUDIO') {
-      const planId = 'creator_studio';
-      navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
+    try {
+      setRedirectingToCheckout(true);
+      
+      // Get the Stripe price ID based on the plan and billing cycle
+      let priceId;
+      if (planName === 'CREATOR PRO') {
+        priceId = `price_creator_pro_${billingCycle}`;
+      } else if (planName === 'CREATOR STUDIO') {
+        priceId = `price_creator_studio_${billingCycle}`;
+      } else {
+        throw new Error('Invalid plan selected');
+      }
+      
+      // Create a checkout session with Stripe
+      const checkoutUrl = await stripeService.createCheckoutSession(priceId);
+      
+      // Redirect to Stripe Checkout
+      window.location.href = checkoutUrl;
+    } catch (error: any) {
+      console.error('Upgrade error:', error);
+      toast.error(error.message || 'Failed to start checkout process');
+      setRedirectingToCheckout(false);
     }
   };
 
@@ -201,7 +218,7 @@ export function UpgradePage() {
                 <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 text-center">
                   <div className="flex items-center justify-center space-x-3 mb-4">
                     <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                      {profile.is_pro ? (
+                      {profile.subscription_tier !== 'free' ? (
                         <Crown className="h-6 w-6 text-white" />
                       ) : (
                         <Star className="h-6 w-6 text-white" />
@@ -212,18 +229,19 @@ export function UpgradePage() {
                         {profile.full_name || 'Creator'}
                       </h3>
                       <p className="text-purple-200">
-                        {profile.is_pro ? 'Pro Member' : 'Free Plan'}
+                        {profile.subscription_tier === 'free' ? 'Free Plan' : 
+                         profile.subscription_tier === 'pro' ? 'Pro Member' : 'Studio Member'}
                       </p>
                     </div>
                   </div>
-                  {!profile.is_pro ? (
+                  {profile.subscription_tier === 'free' ? (
                     <p className="text-purple-200 mb-4">
                       You're currently on the free plan. Upgrade to unlock unlimited features!
                     </p>
                   ) : (
                     <div>
                       <p className="text-green-300 mb-4">
-                        🎉 You're a Pro member! Enjoy unlimited access to all features.
+                        🎉 You're a {profile.subscription_tier === 'pro' ? 'Pro' : 'Studio'} member! Enjoy unlimited access to all features.
                       </p>
                       <Link
                         to="/app/billing"
@@ -331,12 +349,13 @@ export function UpgradePage() {
                           plan.isPopular
                             ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
                             : 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
-                        } ${profile?.is_pro && plan.name === 'CREATOR PRO' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        } ${profile?.subscription_tier !== 'free' && plan.name === 'CREATOR PRO' ? 'opacity-50 cursor-not-allowed' : ''}`}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        disabled={profile?.is_pro && plan.name === 'CREATOR PRO'}
+                        disabled={profile?.subscription_tier !== 'free' && plan.name === 'CREATOR PRO' || redirectingToCheckout}
                       >
-                        {profile?.is_pro && plan.name === 'CREATOR PRO' ? 'Current Plan' : plan.buttonText}
+                        {redirectingToCheckout && plan.name === 'CREATOR PRO' ? 'Redirecting...' : 
+                         profile?.subscription_tier !== 'free' && plan.name === 'CREATOR PRO' ? 'Current Plan' : plan.buttonText}
                       </motion.button>
                     </div>
 
@@ -399,7 +418,7 @@ export function UpgradePage() {
         </section>
 
         {/* CTA Section */}
-        {!profile?.is_pro && (
+        {profile?.subscription_tier === 'free' && (
           <section className="py-20">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
               <motion.div
@@ -415,12 +434,13 @@ export function UpgradePage() {
                 </p>
                 <motion.button
                   onClick={() => handleUpgrade('CREATOR PRO')}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-4 rounded-full text-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg hover:shadow-xl inline-flex items-center space-x-2"
+                  disabled={redirectingToCheckout}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-4 rounded-full text-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg hover:shadow-xl inline-flex items-center space-x-2 disabled:opacity-70"
                   whileHover={{ scale: 1.05, y: -2 }}
                   whileTap={{ scale: 0.95 }}
                 >
                   <Crown className="h-5 w-5" />
-                  <span>Upgrade to Pro Now</span>
+                  <span>{redirectingToCheckout ? 'Redirecting...' : 'Upgrade to Pro Now'}</span>
                 </motion.button>
                 <p className="text-purple-300 text-sm mt-4">
                   30-day money-back guarantee • Cancel anytime

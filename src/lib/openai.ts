@@ -2,99 +2,74 @@
 export class OpenAIService {
   private apiKey: string;
   private baseUrl = 'https://api.openai.com/v1';
+  private supabaseUrl: string;
 
   constructor() {
     this.apiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
+    this.supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    
     if (!this.apiKey) {
-      console.warn('OpenAI API key not found. Content generation will be simulated.');
+      console.warn('OpenAI API key not found. Content generation will use Supabase Edge Functions.');
     }
   }
 
   async generateContent(type: string, niche: string, platform: string, additionalContext?: string): Promise<string> {
-    // Simulate content generation for demo purposes
-    if (!this.apiKey) {
-      return this.simulateContentGeneration(type, niche, platform, additionalContext);
-    }
-
-    const prompts = {
-      script: `Create an engaging ${platform} script for a ${niche} content creator. Make it conversational, valuable, and hook viewers from the start. Include a strong opening, valuable content, and clear call-to-action. ${additionalContext || ''}`,
-      caption: `Write a compelling ${platform} caption for ${niche} content. Include relevant emojis, engaging hooks, and encourage interaction. ${additionalContext || ''}`,
-      hashtags: `Generate 15-20 trending hashtags for ${niche} content on ${platform}. Mix popular and niche-specific tags for maximum reach. ${additionalContext || ''}`,
-      ideas: `Suggest 10 creative content ideas for a ${niche} creator on ${platform}. Make them current, engaging, and aligned with trending topics. ${additionalContext || ''}`
-    };
-
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      // Use Supabase Edge Function to securely call OpenAI
+      const response = await fetch(`${this.supabaseUrl}/functions/v1/generate-content`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token')}`
         },
         body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are CreatorCopilot, an AI assistant specialized in helping content creators generate high-quality, engaging content across social media platforms.'
-            },
-            {
-              role: 'user',
-              content: prompts[type as keyof typeof prompts] || prompts.ideas
-            }
-          ],
-          max_tokens: 1000,
-          temperature: 0.8,
-        }),
+          type,
+          niche,
+          platform,
+          additionalContext,
+          title: `${type.charAt(0).toUpperCase() + type.slice(1)} for ${niche} on ${platform}`
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.statusText}`);
+        const error = await response.json();
+        
+        // Check if it's a usage limit error
+        if (response.status === 403 && error.error === 'Usage limit reached') {
+          throw new Error(`${error.message} Current usage: ${error.usage}/${error.limit}`);
+        }
+        
+        throw new Error(error.error || 'Failed to generate content');
       }
 
       const data = await response.json();
-      return data.choices[0]?.message?.content || 'Unable to generate content';
+      return data.content;
     } catch (error) {
-      console.error('OpenAI API error:', error);
+      console.error('Content generation error:', error);
+      
+      // Fall back to simulation if the API call fails
       return this.simulateContentGeneration(type, niche, platform, additionalContext);
     }
   }
 
   async getTrendingTopics(niche: string): Promise<string[]> {
-    if (!this.apiKey) {
-      return this.getMockTrends(niche);
-    }
-
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      // Use Supabase Edge Function to securely call OpenAI
+      const response = await fetch(`${this.supabaseUrl}/functions/v1/trending-topics`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token')}`
         },
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a trend analysis expert. Provide current trending topics and content formats.'
-            },
-            {
-              role: 'user',
-              content: `What are the top 10 trending topics and content formats in the ${niche} niche this week? Focus on actionable, current trends that content creators can capitalize on.`
-            }
-          ],
-          max_tokens: 500,
-          temperature: 0.7,
-        }),
+        body: JSON.stringify({ niche })
       });
 
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.statusText}`);
+        throw new Error(`Failed to get trending topics: ${response.statusText}`);
       }
 
       const data = await response.json();
-      const content = data.choices[0]?.message?.content || '';
-      return content.split('\n').filter((line: string) => line.trim()).slice(0, 10);
+      return data.topics;
     } catch (error) {
       console.error('Trend analysis error:', error);
       return this.getMockTrends(niche);
