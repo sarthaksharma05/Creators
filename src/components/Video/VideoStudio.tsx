@@ -20,7 +20,8 @@ import {
   Wand2,
   Sparkles,
   Crown,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 import { tavusService } from '../../lib/tavus';
 import { supabase } from '../../lib/supabase';

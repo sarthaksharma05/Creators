@@ -40,23 +40,22 @@ export class TavusService {
         script: script,
         video_name: options.title || `AI Video - ${new Date().toLocaleDateString()}`,
         callback_url: `${window.location.origin}/api/tavus-webhook`,
-        properties: {
-          video_settings: {
-            quality: 'high',
-            resolution: '1080p',
-            fps: 30
-          },
-          audio_settings: {
-            voice_settings: options.voiceSettings || {
-              speed: 1.0,
-              pitch: 1.0,
-              volume: 1.0
-            }
-          },
-          background: options.background || 'office',
-          subtitles: options.subtitles !== false,
-          subtitle_style: options.subtitleStyle || 'modern'
-        }
+        // Remove the properties wrapper and include settings directly at top level
+        video_settings: {
+          quality: 'high',
+          resolution: '1080p',
+          fps: 30
+        },
+        audio_settings: {
+          voice_settings: options.voiceSettings || {
+            speed: 1.0,
+            pitch: 1.0,
+            volume: 1.0
+          }
+        },
+        background: options.background || 'office',
+        subtitles: options.subtitles !== false,
+        subtitle_style: options.subtitleStyle || 'modern'
       };
 
       console.log('📤 Sending request to Tavus API:', requestBody);
