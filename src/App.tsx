@@ -13,6 +13,7 @@ import { CampaignMarketplace } from './components/Campaigns/CampaignMarketplace'
 import { ProfilePage } from './components/Profile/ProfilePage';
 import { BillingPage } from './components/Billing/BillingPage';
 import { CheckoutPage } from './components/Checkout/CheckoutPage';
+import { AnalyticsPage } from './components/Analytics/AnalyticsPage';
 import { SettingsPage } from './components/Settings/SettingsPage';
 import { AboutPage } from './components/About/AboutPage';
 import { PricingPage } from './components/Pricing/PricingPage';
@@ -107,6 +108,7 @@ function App() {
               <Route path="campaigns" element={<CampaignMarketplace />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="billing" element={<BillingPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="upgrade" element={<UpgradePage />} />
             </Route>

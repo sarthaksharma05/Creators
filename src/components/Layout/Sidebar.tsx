@@ -13,7 +13,8 @@ import {
   Crown,
   Sparkles,
   LogOut,
-  CreditCard
+  CreditCard,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -32,6 +33,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     { name: 'AI Videos', href: '/app/videos', icon: Video },
     { name: 'TrendRadar', href: '/app/trends', icon: TrendingUp },
     { name: 'Campaigns', href: '/app/campaigns', icon: Briefcase },
+    { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
     { name: 'Profile', href: '/app/profile', icon: User },
     { name: 'Billing', href: '/app/billing', icon: CreditCard },
     { name: 'Settings', href: '/app/settings', icon: Settings },
