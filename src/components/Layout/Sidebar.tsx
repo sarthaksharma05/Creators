@@ -98,27 +98,29 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   };
 
+  // Only render sidebar when it should be visible
+  if (!isOpen) return null;
+
   return (
     <>
       {/* Mobile overlay */}
-      {isOpen && (
-        <motion.div
-          className="fixed inset-0 bg-black bg-opacity-50 lg:hidden"
-          style={{ zIndex: 999998 }} // High z-index but below sidebar
-          onClick={onClose}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        />
-      )}
-
-      {/* Sidebar */}
       <motion.div
-        className={`fixed top-0 left-0 h-full w-64 bg-white shadow-xl lg:translate-x-0 lg:static lg:inset-0`}
+        className="fixed inset-0 bg-black bg-opacity-50 lg:hidden"
+        style={{ zIndex: 999998 }} // High z-index but below sidebar
+        onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      />
+
+      {/* Sidebar - FIXED position, no space reserved in layout */}
+      <motion.div
+        className="fixed top-0 left-0 h-full w-64 bg-white shadow-xl"
         style={{ zIndex: 999999 }} // Ultra high z-index to appear above everything
         variants={sidebarVariants}
         initial="closed"
-        animate={isOpen ? "open" : "closed"}
+        animate="open"
+        exit="closed"
       >
         <div className="flex h-full flex-col">
           {/* Header */}
