@@ -219,6 +219,8 @@ export function VoiceoverStudio() {
         currentAudio.pause();
         currentAudio.currentTime = 0;
         setIsPlaying(false);
+        // Wait a bit to ensure the previous audio is fully stopped
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       // Create new audio instance
@@ -240,11 +242,11 @@ export function VoiceoverStudio() {
       audio.addEventListener('error', (e) => {
         console.error('❌ Audio error event:', e);
         
-        // Get detailed error information
+        // Get detailed error information with proper null checks
         const target = e.target as HTMLAudioElement;
         if (target && target.error) {
           const errorCode = target.error.code;
-          const errorMessage = target.error.message;
+          const errorMessage = target.error.message || 'Unknown audio error';
           
           console.error('❌ Audio error details:', {
             code: errorCode,
@@ -293,32 +295,61 @@ export function VoiceoverStudio() {
         setIsPlaying(true);
       });
 
-      // Set the audio source
+      // Set the audio source and explicitly load it
       audio.src = url;
       audio.preload = 'auto';
+      audio.load(); // Explicitly load the audio source
       
       // Store reference
       setCurrentAudio(audio);
       audioRef.current = audio;
 
-      // Attempt to play
-      const playPromise = audio.play();
-      
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log('✅ Audio playback started successfully');
-            setIsPlaying(true);
-            if (title) {
-              toast.success(`🎵 Playing: ${title}`);
-            }
-          })
-          .catch((error) => {
-            console.error('❌ Audio play failed:', error);
-            toast.error('Failed to play audio. Please check your browser settings.');
-            setIsPlaying(false);
-          });
-      }
+      // Wait for the audio to be ready before attempting to play
+      const playPromise = new Promise<void>((resolve, reject) => {
+        const attemptPlay = () => {
+          const playResult = audio.play();
+          
+          if (playResult !== undefined) {
+            playResult
+              .then(() => {
+                console.log('✅ Audio playback started successfully');
+                setIsPlaying(true);
+                if (title) {
+                  toast.success(`🎵 Playing: ${title}`);
+                }
+                resolve();
+              })
+              .catch((error) => {
+                console.error('❌ Audio play failed:', error);
+                toast.error('Failed to play audio. Please check your browser settings.');
+                setIsPlaying(false);
+                reject(error);
+              });
+          } else {
+            resolve();
+          }
+        };
+
+        // If audio is ready, play immediately
+        if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+          attemptPlay();
+        } else {
+          // Wait for audio to be ready
+          const onCanPlay = () => {
+            audio.removeEventListener('canplay', onCanPlay);
+            attemptPlay();
+          };
+          audio.addEventListener('canplay', onCanPlay);
+          
+          // Timeout fallback
+          setTimeout(() => {
+            audio.removeEventListener('canplay', onCanPlay);
+            attemptPlay();
+          }, 3000);
+        }
+      });
+
+      await playPromise;
     } catch (error) {
       console.error('❌ Play audio error:', error);
       toast.error('Unable to play audio');
