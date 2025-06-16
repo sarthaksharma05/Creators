@@ -25,19 +25,10 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Get the ElevenLabs API key
-    const elevenLabsApiKey = Deno.env.get("ELEVENLABS_API_KEY") || "";
+    // Get the ElevenLabs API key - use the provided key
+    const elevenLabsApiKey = "sk_f08bd81526c5b374dd56a774b9a2f1aab5b68fc67b2ab81b";
     
-    if (!elevenLabsApiKey) {
-      console.error("ElevenLabs API key not found in environment variables");
-      return new Response(
-        JSON.stringify({ 
-          error: "ElevenLabs API key not configured. Please configure the ELEVENLABS_API_KEY environment variable in your Supabase Edge Functions settings.",
-          details: "Go to your Supabase project dashboard -> Edge Functions -> generate-voiceover -> Environment Variables and add ELEVENLABS_API_KEY"
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
-    }
+    console.log("ElevenLabs API key configured successfully");
     
     // Get the user from the request
     const authHeader = req.headers.get('Authorization');
@@ -79,7 +70,7 @@ serve(async (req) => {
     // Check if the user has reached their usage limit
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('is_pro')
+      .select('is_pro, usage_limits, usage_counts')
       .eq('id', user.id)
       .single();
     
@@ -90,6 +81,24 @@ serve(async (req) => {
     // Calculate the estimated minutes for this script (rough estimate: 150 words per minute)
     const wordCount = script.split(/\s+/).length;
     const estimatedMinutes = wordCount / 150;
+    
+    // Check usage limits for non-pro users
+    if (profile && !profile.is_pro && profile.usage_limits && profile.usage_counts) {
+      const voiceoverLimit = profile.usage_limits.voiceover_minutes || 2;
+      const currentUsage = profile.usage_counts.voiceover_minutes || 0;
+      
+      if (currentUsage + estimatedMinutes > voiceoverLimit) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Usage limit reached", 
+            message: `You've reached your monthly voiceover limit. Current usage: ${currentUsage.toFixed(1)}/${voiceoverLimit} minutes. Upgrade to Pro for unlimited voiceovers.`,
+            limit: voiceoverLimit,
+            usage: currentUsage
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
+        );
+      }
+    }
     
     // Create a record in the database for this voiceover
     const { data: voiceover, error: insertError } = await supabase
@@ -114,6 +123,7 @@ serve(async (req) => {
     
     // Generate the voiceover with ElevenLabs
     console.log(`Generating voiceover with ElevenLabs for voice ${voiceId}`);
+    console.log(`Script length: ${script.length} characters, estimated ${estimatedMinutes.toFixed(2)} minutes`);
     
     // Use proper ElevenLabs API settings for high-quality audio
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
@@ -244,6 +254,20 @@ serve(async (req) => {
       );
     }
     
+    // Update user's usage count
+    if (profile && profile.usage_counts) {
+      const newUsageCount = (profile.usage_counts.voiceover_minutes || 0) + estimatedMinutes;
+      await supabase
+        .from('profiles')
+        .update({
+          usage_counts: {
+            ...profile.usage_counts,
+            voiceover_minutes: newUsageCount
+          }
+        })
+        .eq('id', user.id);
+    }
+    
     console.log(`Voiceover generation completed successfully for ID: ${voiceover.id}`);
     
     return new Response(
@@ -263,7 +287,7 @@ serve(async (req) => {
       JSON.stringify({ 
         error: "Failed to generate voiceover",
         details: error.message,
-        message: "Please ensure your ElevenLabs API key is properly configured in Supabase Edge Functions environment variables."
+        message: "An unexpected error occurred during voiceover generation."
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
