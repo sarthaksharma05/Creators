@@ -25,8 +25,12 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Get the ElevenLabs API key - use the provided key
-    const elevenLabsApiKey = "sk_f08bd81526c5b374dd56a774b9a2f1aab5b68fc67b2ab81b";
+    // Get the ElevenLabs API key from environment variables
+    const elevenLabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    
+    if (!elevenLabsApiKey) {
+      throw new Error("Missing ElevenLabs API key. Please set ELEVENLABS_API_KEY environment variable.");
+    }
     
     console.log("ElevenLabs API key configured successfully");
     
@@ -164,6 +168,8 @@ serve(async (req) => {
         errorMessage = 'Invalid ElevenLabs API key. Please check your API key configuration.';
       } else if (response.status === 402) {
         errorMessage = 'ElevenLabs account has insufficient credits. Please check your billing.';
+      } else if (response.status === 404) {
+        errorMessage = `Voice not found. The voice ID "${voiceId}" is not available in your ElevenLabs account. Please check available voices or contact support.`;
       } else if (response.status === 429) {
         errorMessage = 'ElevenLabs API rate limit exceeded. Please try again in a few minutes.';
       } else if (response.status === 422) {
