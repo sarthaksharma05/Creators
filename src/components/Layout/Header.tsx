@@ -146,7 +146,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <motion.header 
-      className="bg-white shadow-sm border-b border-gray-200 relative z-40"
+      className="bg-white shadow-sm border-b border-gray-200 relative z-50"
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3 }}
@@ -248,24 +248,26 @@ export function Header({ onMenuClick }: HeaderProps) {
                 <>
                   {/* Mobile backdrop - only show on mobile */}
                   <motion.div 
-                    className="fixed inset-0 bg-black/40 z-[999998] md:hidden"
+                    className="fixed inset-0 bg-black/40 z-[99998] md:hidden"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     onClick={() => setShowDropdown(false)}
                   />
                   
-                  {/* Dropdown content - Maximum z-index to appear above everything */}
+                  {/* Dropdown content - Ultra high z-index to appear above everything */}
                   <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[999999] overflow-hidden"
+                    className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 overflow-hidden"
                     style={{ 
-                      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.1)',
-                      position: 'absolute',
-                      zIndex: 999999
+                      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.15)',
+                      position: 'fixed',
+                      zIndex: 999999,
+                      right: '1rem',
+                      top: '4rem'
                     }}
                   >
                     {/* User Info Header */}
