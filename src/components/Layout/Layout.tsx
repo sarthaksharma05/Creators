@@ -8,11 +8,9 @@ export function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Sidebar - Always visible on desktop, toggleable on mobile */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col lg:ml-64">
+      <div className="flex-1 flex flex-col">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="flex-1 overflow-y-auto">
