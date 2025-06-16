@@ -16,7 +16,11 @@ import {
   RefreshCw,
   CheckCircle,
   AlertCircle,
-  Loader
+  Loader,
+  Wand2,
+  Sparkles,
+  Crown,
+  ExternalLink
 } from 'lucide-react';
 import { tavusService } from '../../lib/tavus';
 import { supabase } from '../../lib/supabase';
@@ -43,10 +47,13 @@ interface VideoProject {
   title: string;
   script: string;
   status: 'generating' | 'completed' | 'failed';
+  progress?: number;
   videoUrl?: string;
   thumbnailUrl?: string;
   createdAt: string;
   settings: any;
+  estimatedCompletion?: string;
+  errorMessage?: string;
 }
 
 export function VideoStudio() {
@@ -58,8 +65,9 @@ export function VideoStudio() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoRef, setVideoRef] = useState<HTMLVideoElement | null>(null);
   const [activeTab, setActiveTab] = useState('create');
+  const [pollingIntervals, setPollingIntervals] = useState<Map<string, NodeJS.Timeout>>(new Map());
   
-  const { register, handleSubmit, watch, setValue } = useForm<VideoForm>({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<VideoForm>({
     defaultValues: {
       title: '',
       script: '',
@@ -93,75 +101,53 @@ export function VideoStudio() {
   useEffect(() => {
     loadReplicas();
     loadVideoProjects();
+    
+    // Cleanup polling intervals on unmount
+    return () => {
+      pollingIntervals.forEach(interval => clearInterval(interval));
+    };
   }, []);
 
   const loadReplicas = async () => {
     try {
-      // Mock replicas for demo - in production, these would come from Tavus API
-      const mockReplicas = [
-        { 
-          id: 'professional-male', 
-          name: 'Professional Male', 
-          description: 'Business professional, clear speech',
-          preview: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
-        },
-        { 
-          id: 'friendly-female', 
-          name: 'Friendly Female', 
-          description: 'Warm, approachable presenter',
-          preview: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face'
-        },
-        { 
-          id: 'energetic-male', 
-          name: 'Energetic Male', 
-          description: 'Dynamic, enthusiastic delivery',
-          preview: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face'
-        },
-        { 
-          id: 'professional-female', 
-          name: 'Professional Female', 
-          description: 'Authoritative, confident speaker',
-          preview: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face'
-        },
-      ];
+      console.log('🎭 Loading Tavus replicas...');
+      const replicaList = await tavusService.getReplicas();
+      console.log('✅ Replicas loaded:', replicaList.length);
+      setReplicas(replicaList);
       
-      setReplicas(mockReplicas);
-      if (mockReplicas.length > 0) {
-        setValue('replicaId', mockReplicas[0].id);
+      if (replicaList.length > 0) {
+        setValue('replicaId', replicaList[0].replica_id);
+        console.log('✅ Default replica set to:', replicaList[0].name);
       }
     } catch (error) {
-      console.error('Error loading replicas:', error);
+      console.error('❌ Error loading replicas:', error);
+      toast.error('Failed to load AI avatars');
     }
   };
 
   const loadVideoProjects = async () => {
     try {
-      // Mock video projects for demo
-      const mockProjects: VideoProject[] = [
-        {
-          id: 'project-1',
-          title: 'Product Launch Video',
-          script: 'Welcome to our exciting new product launch! Today, we\'re introducing a revolutionary solution...',
-          status: 'completed',
-          videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-          thumbnailUrl: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=300&h=200&fit=crop',
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-          settings: { background: 'office', subtitles: true }
-        },
-        {
-          id: 'project-2',
-          title: 'Tutorial Introduction',
-          script: 'Hi everyone! In today\'s tutorial, we\'ll be covering the essential steps to get started...',
-          status: 'generating',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-          settings: { background: 'studio', subtitles: true }
-        },
-      ];
-      
-      setVideoProjects(mockProjects);
+      // Load from localStorage for demo (in production, this would come from database)
+      const savedProjects = localStorage.getItem('videoProjects');
+      if (savedProjects) {
+        const projects = JSON.parse(savedProjects);
+        setVideoProjects(projects);
+        
+        // Resume polling for any generating videos
+        projects.forEach((project: VideoProject) => {
+          if (project.status === 'generating') {
+            startPollingVideoStatus(project.id);
+          }
+        });
+      }
     } catch (error) {
-      console.error('Error loading video projects:', error);
+      console.error('❌ Error loading video projects:', error);
     }
+  };
+
+  const saveVideoProjects = (projects: VideoProject[]) => {
+    localStorage.setItem('videoProjects', JSON.stringify(projects));
+    setVideoProjects(projects);
   };
 
   const onSubmit = async (data: VideoForm) => {
@@ -170,18 +156,50 @@ export function VideoStudio() {
       return;
     }
 
+    if (!data.script.trim()) {
+      toast.error('Please enter a script for your video');
+      return;
+    }
+
+    if (!data.title.trim()) {
+      toast.error('Please enter a title for your video');
+      return;
+    }
+
+    if (!data.replicaId) {
+      toast.error('Please select an AI avatar');
+      return;
+    }
+
     setLoading(true);
+    
     try {
+      console.log('🎬 Starting AI video generation with Tavus...');
+      console.log('📝 Script:', data.script.substring(0, 100) + '...');
+      console.log('🎭 Avatar:', data.replicaId);
+      console.log('🎨 Background:', data.background);
+      
+      // Show immediate feedback
+      toast.loading('Initializing AI video generation...', { id: 'video-generation' });
+      
       // Create video with Tavus
-      const result = await tavusService.createVideo(data.script, data.replicaId);
+      const result = await tavusService.createVideo(data.script, data.replicaId, {
+        title: data.title,
+        background: data.background,
+        subtitles: data.subtitles,
+        subtitleStyle: data.subtitleStyle,
+        voiceSettings: data.voiceSettings,
+      });
       
       const newProject: VideoProject = {
         id: result.videoId,
         title: data.title,
         script: data.script,
         status: 'generating',
+        progress: 0,
         createdAt: new Date().toISOString(),
         settings: {
+          replicaId: data.replicaId,
           background: data.background,
           subtitles: data.subtitles,
           subtitleStyle: data.subtitleStyle,
@@ -189,66 +207,118 @@ export function VideoStudio() {
         }
       };
 
-      setVideoProjects([newProject, ...videoProjects]);
+      const updatedProjects = [newProject, ...videoProjects];
+      saveVideoProjects(updatedProjects);
       setCurrentVideo(newProject);
       
       // Start polling for video status
-      pollVideoStatus(result.videoId);
+      startPollingVideoStatus(result.videoId);
       
-      toast.success('Video generation started! This may take a few minutes.');
+      toast.success('🎬 AI video generation started! This may take a few minutes.', { id: 'video-generation' });
       setActiveTab('projects');
-    } catch (error) {
-      toast.error('Failed to generate video');
+      
+      // Clear form
+      setValue('title', '');
+      setValue('script', '');
+      
+    } catch (error: any) {
+      console.error('❌ Video generation error:', error);
+      toast.error(error.message || 'Failed to generate video. Please try again.', { id: 'video-generation' });
     } finally {
       setLoading(false);
     }
   };
 
-  const pollVideoStatus = async (videoId: string) => {
-    const maxAttempts = 30; // 5 minutes with 10-second intervals
+  const startPollingVideoStatus = (videoId: string) => {
+    // Clear existing interval if any
+    const existingInterval = pollingIntervals.get(videoId);
+    if (existingInterval) {
+      clearInterval(existingInterval);
+    }
+
+    const maxAttempts = 60; // 10 minutes with 10-second intervals
     let attempts = 0;
 
     const poll = async () => {
       try {
-        const status = await tavusService.getVideoStatus(videoId);
+        console.log(`📊 Polling status for video ${videoId} (attempt ${attempts + 1}/${maxAttempts})`);
         
-        if (status.status === 'completed') {
-          setVideoProjects(prev => 
-            prev.map(project => 
-              project.id === videoId 
-                ? { 
-                    ...project, 
-                    status: 'completed', 
-                    videoUrl: status.download_url,
-                    thumbnailUrl: status.thumbnail_url 
-                  }
-                : project
-            )
+        const status = await tavusService.getVideoStatus(videoId);
+        console.log('📊 Video status:', status);
+        
+        // Update project status
+        setVideoProjects(prev => {
+          const updated = prev.map(project => 
+            project.id === videoId 
+              ? { 
+                  ...project, 
+                  status: status.status,
+                  progress: status.progress || project.progress,
+                  videoUrl: status.download_url || project.videoUrl,
+                  thumbnailUrl: status.thumbnail_url || project.thumbnailUrl,
+                  estimatedCompletion: status.estimated_completion,
+                  errorMessage: status.error_message
+                }
+              : project
           );
-          toast.success('Video generation completed!');
+          saveVideoProjects(updated);
+          return updated;
+        });
+
+        if (status.status === 'completed') {
+          console.log('✅ Video generation completed!');
+          toast.success('🎉 Your AI video is ready!');
+          
+          // Clear polling interval
+          const interval = pollingIntervals.get(videoId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervals.delete(videoId);
+          }
           return;
         } else if (status.status === 'failed') {
-          setVideoProjects(prev => 
-            prev.map(project => 
-              project.id === videoId 
-                ? { ...project, status: 'failed' }
-                : project
-            )
-          );
-          toast.error('Video generation failed');
+          console.log('❌ Video generation failed');
+          toast.error(`Video generation failed: ${status.error_message || 'Unknown error'}`);
+          
+          // Clear polling interval
+          const interval = pollingIntervals.get(videoId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervals.delete(videoId);
+          }
           return;
         }
 
         attempts++;
-        if (attempts < maxAttempts) {
-          setTimeout(poll, 10000); // Poll every 10 seconds
+        if (attempts >= maxAttempts) {
+          console.log('⏰ Polling timeout reached');
+          toast.warning('Video generation is taking longer than expected. Please check back later.');
+          
+          // Clear polling interval
+          const interval = pollingIntervals.get(videoId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervals.delete(videoId);
+          }
         }
       } catch (error) {
-        console.error('Error polling video status:', error);
+        console.error('❌ Error polling video status:', error);
+        attempts++;
+        
+        if (attempts >= maxAttempts) {
+          const interval = pollingIntervals.get(videoId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervals.delete(videoId);
+          }
+        }
       }
     };
 
+    // Start polling immediately, then every 10 seconds
     poll();
+    const interval = setInterval(poll, 10000);
+    pollingIntervals.set(videoId, interval);
   };
 
   const canGenerateVideo = () => {
@@ -256,20 +326,93 @@ export function VideoStudio() {
   };
 
   const playVideo = (project: VideoProject) => {
-    if (!project.videoUrl) return;
+    if (!project.videoUrl) {
+      toast.error('Video not available yet');
+      return;
+    }
     setCurrentVideo(project);
     setIsPlaying(true);
   };
 
   const downloadVideo = (project: VideoProject) => {
-    if (!project.videoUrl) return;
+    if (!project.videoUrl) {
+      toast.error('Video not available for download yet');
+      return;
+    }
     
-    const link = document.createElement('a');
-    link.href = project.videoUrl;
-    link.download = `${project.title.replace(/\s+/g, '-').toLowerCase()}.mp4`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const link = document.createElement('a');
+      link.href = project.videoUrl;
+      link.download = `${project.title.replace(/\s+/g, '-').toLowerCase()}.mp4`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('📥 Video download started!');
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Failed to download video');
+    }
+  };
+
+  const retryVideoGeneration = async (project: VideoProject) => {
+    try {
+      toast.loading('Retrying video generation...', { id: 'retry-video' });
+      
+      const result = await tavusService.createVideo(
+        project.script, 
+        project.settings.replicaId,
+        {
+          title: project.title,
+          ...project.settings
+        }
+      );
+      
+      // Update project with new video ID and reset status
+      setVideoProjects(prev => {
+        const updated = prev.map(p => 
+          p.id === project.id 
+            ? { 
+                ...p, 
+                id: result.videoId,
+                status: 'generating' as const,
+                progress: 0,
+                videoUrl: undefined,
+                thumbnailUrl: undefined,
+                errorMessage: undefined
+              }
+            : p
+        );
+        saveVideoProjects(updated);
+        return updated;
+      });
+      
+      // Start polling for the new video
+      startPollingVideoStatus(result.videoId);
+      
+      toast.success('Video generation restarted!', { id: 'retry-video' });
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to retry video generation', { id: 'retry-video' });
+    }
+  };
+
+  const deleteProject = (projectId: string) => {
+    // Clear any polling for this project
+    const interval = pollingIntervals.get(projectId);
+    if (interval) {
+      clearInterval(interval);
+      pollingIntervals.delete(projectId);
+    }
+    
+    // Remove from projects
+    const updatedProjects = videoProjects.filter(p => p.id !== projectId);
+    saveVideoProjects(updatedProjects);
+    
+    if (currentVideo?.id === projectId) {
+      setCurrentVideo(null);
+    }
+    
+    toast.success('Project deleted');
   };
 
   const tabs = [
@@ -291,8 +434,25 @@ export function VideoStudio() {
           </motion.div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">AI Video Studio</h1>
-            <p className="text-gray-600">Create professional videos with AI avatars and scripts</p>
+            <p className="text-gray-600">Create professional videos with AI avatars powered by Tavus</p>
           </div>
+        </div>
+
+        {/* API Status */}
+        <div className="mb-6">
+          {tavusService.isConfigured() ? (
+            <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+              <CheckCircle className="h-4 w-4" />
+              <span className="text-sm font-medium">Tavus API Connected</span>
+              <span className="text-xs text-green-500">Ready to generate AI videos</span>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm font-medium">Demo Mode</span>
+              <span className="text-xs text-amber-500">Add your Tavus API key for real AI video generation</span>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -321,7 +481,7 @@ export function VideoStudio() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Video Title
+                  Video Title *
                 </label>
                 <input
                   {...register('title', { required: 'Title is required' })}
@@ -329,51 +489,75 @@ export function VideoStudio() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter a title for your video..."
                 />
+                {errors.title && (
+                  <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Script
+                  Script *
                 </label>
                 <textarea
-                  {...register('script', { required: 'Script is required' })}
+                  {...register('script', { 
+                    required: 'Script is required',
+                    minLength: { value: 10, message: 'Script must be at least 10 characters' },
+                    maxLength: { value: 2000, message: 'Script must be less than 2000 characters' }
+                  })}
                   rows={6}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter your video script here..."
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Character count: {watch('script')?.length || 0} (recommended: 150-500 characters)
-                </p>
+                <div className="flex justify-between mt-1">
+                  {errors.script && (
+                    <p className="text-sm text-red-600">{errors.script.message}</p>
+                  )}
+                  <p className="text-xs text-gray-500 ml-auto">
+                    Character count: {watch('script')?.length || 0} / 2000
+                  </p>
+                </div>
               </div>
 
               {/* AI Avatar Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  AI Avatar
+                  AI Avatar *
                 </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {replicas.map((replica) => (
-                    <label key={replica.id} className="relative">
-                      <input
-                        {...register('replicaId')}
-                        type="radio"
-                        value={replica.id}
-                        className="sr-only peer"
-                      />
-                      <div className="flex items-center p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-primary-300 peer-checked:border-primary-500 peer-checked:bg-primary-50 transition-all">
-                        <img
-                          src={replica.preview}
-                          alt={replica.name}
-                          className="w-12 h-12 rounded-full mr-3"
+                {replicas.length === 0 ? (
+                  <div className="flex items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-lg">
+                    <div className="text-center">
+                      <Loader className="h-8 w-8 text-gray-400 mx-auto mb-2 animate-spin" />
+                      <p className="text-gray-500">Loading AI avatars...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {replicas.map((replica) => (
+                      <label key={replica.replica_id} className="relative">
+                        <input
+                          {...register('replicaId', { required: 'Please select an AI avatar' })}
+                          type="radio"
+                          value={replica.replica_id}
+                          className="sr-only peer"
                         />
-                        <div>
-                          <div className="font-medium text-gray-900">{replica.name}</div>
-                          <div className="text-sm text-gray-500">{replica.description}</div>
+                        <div className="flex items-center p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-primary-300 peer-checked:border-primary-500 peer-checked:bg-primary-50 transition-all">
+                          <img
+                            src={replica.thumbnail_url}
+                            alt={replica.name}
+                            className="w-12 h-12 rounded-full mr-3 object-cover"
+                          />
+                          <div>
+                            <div className="font-medium text-gray-900">{replica.name}</div>
+                            <div className="text-sm text-gray-500">{replica.description}</div>
+                          </div>
                         </div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {errors.replicaId && (
+                  <p className="mt-1 text-sm text-red-600">{errors.replicaId.message}</p>
+                )}
               </div>
 
               {/* Background Selection */}
@@ -407,16 +591,19 @@ export function VideoStudio() {
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                disabled={loading || replicas.length === 0}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-2"
               >
                 {loading ? (
-                  <div className="flex items-center justify-center space-x-2">
+                  <>
                     <Loader className="w-5 h-5 animate-spin" />
-                    <span>Generating Video...</span>
-                  </div>
+                    <span>Generating AI Video...</span>
+                  </>
                 ) : (
-                  'Generate AI Video'
+                  <>
+                    <Wand2 className="w-5 h-5" />
+                    <span>Generate AI Video</span>
+                  </>
                 )}
               </button>
             </form>
@@ -505,21 +692,45 @@ export function VideoStudio() {
             {!profile?.is_pro && (
               <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
                 <div className="flex items-center space-x-2 mb-3">
-                  <Type className="h-5 w-5 text-purple-600" />
+                  <Crown className="h-5 w-5 text-purple-600" />
                   <h3 className="font-semibold text-purple-900">Pro Features</h3>
                 </div>
-                <ul className="space-y-2 text-sm text-purple-700">
+                <ul className="space-y-2 text-sm text-purple-700 mb-4">
                   <li>• Custom AI avatar training</li>
                   <li>• Advanced subtitle animations</li>
                   <li>• 4K video resolution</li>
                   <li>• Unlimited video generations</li>
                   <li>• Priority processing</li>
+                  <li>• Commercial usage rights</li>
                 </ul>
-                <button className="mt-4 w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all">
+                <button 
+                  onClick={() => window.location.href = '/app/upgrade'}
+                  className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all"
+                >
                   Upgrade to Pro
                 </button>
               </div>
             )}
+
+            {/* Tavus Info */}
+            <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-6 border border-orange-200">
+              <div className="flex items-center space-x-2 mb-3">
+                <Sparkles className="h-5 w-5 text-orange-600" />
+                <h3 className="font-semibold text-orange-900">Powered by Tavus</h3>
+              </div>
+              <p className="text-sm text-orange-700 mb-4">
+                Our AI video generation is powered by Tavus, the leading platform for creating realistic AI avatars and videos.
+              </p>
+              <a 
+                href="https://tavus.io" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-1 text-orange-600 hover:text-orange-700 font-medium text-sm"
+              >
+                <span>Learn more about Tavus</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -550,13 +761,19 @@ export function VideoStudio() {
 
           {/* Video Projects Grid */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">My Video Projects</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">My AI Video Projects</h3>
             
             {videoProjects.length === 0 ? (
               <div className="text-center py-12">
                 <Video className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No videos yet</h3>
-                <p className="text-gray-600">Create your first AI video to get started!</p>
+                <p className="text-gray-600 mb-4">Create your first AI video to get started!</p>
+                <button
+                  onClick={() => setActiveTab('create')}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all"
+                >
+                  Create Your First Video
+                </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -576,7 +793,25 @@ export function VideoStudio() {
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           {project.status === 'generating' ? (
-                            <Loader className="h-8 w-8 text-gray-400 animate-spin" />
+                            <div className="text-center">
+                              <Loader className="h-8 w-8 text-gray-400 animate-spin mx-auto mb-2" />
+                              {project.progress !== undefined && (
+                                <div className="w-32 bg-gray-200 rounded-full h-2 mx-auto mb-2">
+                                  <div 
+                                    className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${project.progress}%` }}
+                                  ></div>
+                                </div>
+                              )}
+                              <p className="text-xs text-gray-500">
+                                {project.progress !== undefined ? `${project.progress}%` : 'Processing...'}
+                              </p>
+                            </div>
+                          ) : project.status === 'failed' ? (
+                            <div className="text-center">
+                              <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+                              <p className="text-xs text-red-500">Generation failed</p>
+                            </div>
                           ) : (
                             <Video className="h-8 w-8 text-gray-400" />
                           )}
@@ -620,29 +855,59 @@ export function VideoStudio() {
                       <h4 className="font-medium text-gray-900 mb-2">{project.title}</h4>
                       <p className="text-sm text-gray-600 mb-3 line-clamp-2">{project.script}</p>
                       
+                      {project.status === 'failed' && project.errorMessage && (
+                        <p className="text-xs text-red-600 mb-3">{project.errorMessage}</p>
+                      )}
+                      
+                      {project.estimatedCompletion && project.status === 'generating' && (
+                        <p className="text-xs text-blue-600 mb-3">
+                          ETA: {new Date(project.estimatedCompletion).toLocaleTimeString()}
+                        </p>
+                      )}
+                      
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500">
                           {new Date(project.createdAt).toLocaleDateString()}
                         </span>
                         
-                        {project.status === 'completed' && project.videoUrl && (
-                          <div className="flex space-x-2">
+                        <div className="flex space-x-2">
+                          {project.status === 'completed' && project.videoUrl && (
+                            <>
+                              <button
+                                onClick={() => playVideo(project)}
+                                className="p-1 text-gray-500 hover:text-primary-600 transition-colors"
+                                title="Play video"
+                              >
+                                <Play className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => downloadVideo(project)}
+                                className="p-1 text-gray-500 hover:text-primary-600 transition-colors"
+                                title="Download video"
+                              >
+                                <Download className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                          
+                          {project.status === 'failed' && (
                             <button
-                              onClick={() => playVideo(project)}
+                              onClick={() => retryVideoGeneration(project)}
                               className="p-1 text-gray-500 hover:text-primary-600 transition-colors"
-                              title="Play video"
+                              title="Retry generation"
                             >
-                              <Play className="h-4 w-4" />
+                              <RefreshCw className="h-4 w-4" />
                             </button>
-                            <button
-                              onClick={() => downloadVideo(project)}
-                              className="p-1 text-gray-500 hover:text-primary-600 transition-colors"
-                              title="Download video"
-                            >
-                              <Download className="h-4 w-4" />
-                            </button>
-                          </div>
-                        )}
+                          )}
+                          
+                          <button
+                            onClick={() => deleteProject(project.id)}
+                            className="p-1 text-gray-500 hover:text-red-600 transition-colors"
+                            title="Delete project"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </motion.div>
