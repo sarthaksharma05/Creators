@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { Mic, Play, Pause, Download, Save, Volume2, AudioWaveform as Waveform, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mic, Play, Pause, Download, Save, Volume2, AudioWaveform as Waveform, RefreshCw, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import { elevenLabsService } from '../../lib/elevenlabs';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -157,7 +157,6 @@ export function VoiceoverStudio() {
     }
 
     setLoading(true);
-    // Don't clear audioUrl here to prevent empty src attribute errors
     setCurrentTitle(data.title);
 
     try {
@@ -174,11 +173,11 @@ export function VoiceoverStudio() {
 
       console.log('✅ Voice generation successful!');
       
-      // Set the new audio URL - the useEffect will handle cleanup of the previous one
+      // Set the new audio URL
       setAudioUrl(generatedAudioUrl);
       
-      // Only save to database if ElevenLabs is properly configured and we have a persistent URL
-      if (profile && isElevenLabsConfigured && !generatedAudioUrl.startsWith('blob:')) {
+      // Save to database if we have a valid URL
+      if (profile && generatedAudioUrl && !generatedAudioUrl.startsWith('blob:')) {
         try {
           const { data: savedVoiceover, error } = await supabase
             .from('voiceovers')
@@ -209,7 +208,17 @@ export function VoiceoverStudio() {
       toast.success('🎉 Voiceover generated successfully!');
     } catch (error: any) {
       console.error('❌ Voiceover generation error:', error);
-      toast.error(error.message || 'Failed to generate voiceover. Please try again.');
+      
+      // Show specific error messages to help users understand the issue
+      if (error.message.includes('Authentication is required')) {
+        toast.error('Please sign in to generate voiceovers');
+      } else if (error.message.includes('API is not configured')) {
+        toast.error('Voice generation is not available. Please contact support.');
+      } else if (error.message.includes('Usage limit')) {
+        toast.error(error.message);
+      } else {
+        toast.error('Failed to generate voiceover. Please try again or contact support if the issue persists.');
+      }
     } finally {
       setLoading(false);
     }
@@ -454,6 +463,21 @@ export function VoiceoverStudio() {
           </div>
         </div>
 
+        {/* API Status Warning */}
+        {!isElevenLabsConfigured && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600" />
+              <div>
+                <h3 className="font-medium text-yellow-800">Voice Generation Not Available</h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  ElevenLabs API is not configured on this server. Please contact support to enable professional voice generation.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -537,7 +561,7 @@ export function VoiceoverStudio() {
 
           <button
             type="submit"
-            disabled={loading || voices.length === 0}
+            disabled={loading || voices.length === 0 || !isElevenLabsConfigured}
             className="w-full bg-gradient-to-r from-secondary-500 to-cyan-500 text-white py-3 px-4 rounded-lg font-medium hover:from-secondary-600 hover:to-cyan-600 focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             {loading ? (
@@ -545,6 +569,8 @@ export function VoiceoverStudio() {
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span>Generating Voiceover...</span>
               </div>
+            ) : !isElevenLabsConfigured ? (
+              'Voice Generation Unavailable'
             ) : (
               'Generate Voiceover'
             )}
@@ -585,18 +611,6 @@ export function VoiceoverStudio() {
               </button>
             </div>
           </div>
-
-          {/* Show warning for demo voiceovers */}
-          {!isElevenLabsConfigured && audioUrl.startsWith('blob:') && (
-            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-                <p className="text-sm text-yellow-800">
-                  This is a demo voiceover. Configure ElevenLabs API to save voiceovers permanently.
-                </p>
-              </div>
-            </div>
-          )}
 
           <div className="bg-gradient-to-r from-secondary-50 to-cyan-50 rounded-lg p-6">
             <div className="flex items-center space-x-4">
