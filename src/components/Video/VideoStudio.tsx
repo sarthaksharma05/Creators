@@ -67,6 +67,7 @@ export function VideoStudio() {
   const [videoRef, setVideoRef] = useState<HTMLVideoElement | null>(null);
   const [activeTab, setActiveTab] = useState('create');
   const [pollingIntervals, setPollingIntervals] = useState<Map<string, NodeJS.Timeout>>(new Map());
+  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<VideoForm>({
     defaultValues: {
@@ -100,6 +101,7 @@ export function VideoStudio() {
   ];
 
   useEffect(() => {
+    checkApiStatus();
     loadReplicas();
     loadVideoProjects();
     
@@ -108,6 +110,22 @@ export function VideoStudio() {
       pollingIntervals.forEach(interval => clearInterval(interval));
     };
   }, []);
+
+  const checkApiStatus = () => {
+    try {
+      const status = tavusService.getConfigStatus();
+      console.log('Tavus API Status:', status);
+      
+      if (status.configured) {
+        setApiStatus('connected');
+      } else {
+        setApiStatus('error');
+      }
+    } catch (error) {
+      console.error('Error checking API status:', error);
+      setApiStatus('error');
+    }
+  };
 
   const loadReplicas = async () => {
     try {
@@ -441,7 +459,7 @@ export function VideoStudio() {
 
         {/* API Status */}
         <div className="mb-6">
-          {tavusService.isConfigured() ? (
+          {apiStatus === 'connected' ? (
             <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
               <CheckCircle className="h-4 w-4" />
               <span className="text-sm font-medium">Tavus API Connected</span>
