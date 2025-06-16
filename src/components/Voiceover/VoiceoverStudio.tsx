@@ -171,6 +171,13 @@ export function VoiceoverStudio() {
   };
 
   const playAudio = async (url: string, title?: string) => {
+    // Validate URL before proceeding
+    if (!url || typeof url !== 'string' || url.trim() === '') {
+      console.error('Invalid audio URL provided:', url);
+      toast.error('No audio available to play');
+      return;
+    }
+
     try {
       console.log('Attempting to play audio:', url);
       
