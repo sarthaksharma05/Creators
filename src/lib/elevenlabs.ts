@@ -23,19 +23,21 @@ export class ElevenLabsService {
       });
 
       if (!response.ok) {
-        throw new Error(`ElevenLabs API error: ${response.statusText}`);
+        console.warn(`ElevenLabs API error: ${response.statusText}. Falling back to mock voices.`);
+        return this.getMockVoices();
       }
 
       const data = await response.json();
       return data.voices || [];
     } catch (error) {
-      console.error('ElevenLabs API error:', error);
+      console.warn('ElevenLabs API error:', error, 'Falling back to mock voices.');
       return this.getMockVoices();
     }
   }
 
   async generateVoice(text: string, voiceId: string): Promise<string> {
     if (!this.apiKey) {
+      console.log('No ElevenLabs API key found. Using simulated voice generation.');
       return this.simulateVoiceGeneration();
     }
 
@@ -58,13 +60,14 @@ export class ElevenLabsService {
       });
 
       if (!response.ok) {
-        throw new Error(`ElevenLabs API error: ${response.statusText}`);
+        console.warn(`ElevenLabs API error: ${response.statusText}. Using simulated voice generation.`);
+        return this.simulateVoiceGeneration();
       }
 
       const audioBlob = await response.blob();
       return URL.createObjectURL(audioBlob);
     } catch (error) {
-      console.error('Voice generation error:', error);
+      console.warn('Voice generation error:', error, 'Using simulated voice generation.');
       return this.simulateVoiceGeneration();
     }
   }

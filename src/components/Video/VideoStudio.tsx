@@ -526,7 +526,7 @@ export function VideoStudio() {
 
       {activeTab === 'projects' && (
         <div className="space-y-6">
-          {/* Current Video Player */}
+          {/* Current Video Player - Only render if video has a valid URL */}
           {currentVideo && currentVideo.videoUrl && (
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{currentVideo.title}</h3>
@@ -537,6 +537,10 @@ export function VideoStudio() {
                   controls
                   className="w-full h-full"
                   poster={currentVideo.thumbnailUrl}
+                  onError={(e) => {
+                    console.error('Video loading error:', e);
+                    toast.error('Failed to load video');
+                  }}
                 >
                   Your browser does not support the video tag.
                 </video>
@@ -601,7 +605,7 @@ export function VideoStudio() {
                         )}
                       </div>
 
-                      {/* Play Button */}
+                      {/* Play Button - Only show if video URL exists */}
                       {project.videoUrl && (
                         <button
                           onClick={() => playVideo(project)}
@@ -621,7 +625,7 @@ export function VideoStudio() {
                           {new Date(project.createdAt).toLocaleDateString()}
                         </span>
                         
-                        {project.status === 'completed' && (
+                        {project.status === 'completed' && project.videoUrl && (
                           <div className="flex space-x-2">
                             <button
                               onClick={() => playVideo(project)}
