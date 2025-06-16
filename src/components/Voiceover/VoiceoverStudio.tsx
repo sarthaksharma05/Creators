@@ -395,40 +395,6 @@ export function VoiceoverStudio() {
           </div>
         </div>
 
-        {/* API Status Indicator */}
-        <div className="mb-6">
-          <div className={`flex items-center space-x-2 p-3 rounded-lg ${
-            apiStatus === 'connected' 
-              ? 'bg-green-50 border border-green-200' 
-              : apiStatus === 'error'
-              ? 'bg-red-50 border border-red-200'
-              : 'bg-yellow-50 border border-yellow-200'
-          }`}>
-            {apiStatus === 'connected' && <CheckCircle className="h-5 w-5 text-green-600" />}
-            {apiStatus === 'error' && <AlertCircle className="h-5 w-5 text-red-600" />}
-            {apiStatus === 'checking' && <RefreshCw className="h-5 w-5 text-yellow-600 animate-spin" />}
-            
-            <div>
-              <p className={`font-medium ${
-                apiStatus === 'connected' ? 'text-green-800' : 
-                apiStatus === 'error' ? 'text-red-800' : 'text-yellow-800'
-              }`}>
-                {apiStatus === 'connected' && 'ElevenLabs API Connected'}
-                {apiStatus === 'error' && 'ElevenLabs API Not Connected'}
-                {apiStatus === 'checking' && 'Checking ElevenLabs API...'}
-              </p>
-              <p className={`text-sm ${
-                apiStatus === 'connected' ? 'text-green-600' : 
-                apiStatus === 'error' ? 'text-red-600' : 'text-yellow-600'
-              }`}>
-                {apiStatus === 'connected' && 'Ready to generate high-quality voiceovers'}
-                {apiStatus === 'error' && 'Using simulated voice generation for demo'}
-                {apiStatus === 'checking' && 'Verifying API connection...'}
-              </p>
-            </div>
-          </div>
-        </div>
-
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
