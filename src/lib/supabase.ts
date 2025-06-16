@@ -28,24 +28,46 @@ if (!hasValidSupabaseConfig) {
   console.warn('- VITE_SUPABASE_ANON_KEY should be your anon/public key');
   console.warn('- Make sure the .env file is in the root directory');
   console.warn('- Restart the development server after adding environment variables');
+  console.warn('- Application will run in demo mode with limited functionality');
 }
 
-// Create the real Supabase client
-export const supabase = createClient(supabaseUrl!, supabaseAnonKey!, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce'
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'creator-copilot@1.0.0'
-    }
-  }
-});
+// Create a mock client for development when config is missing
+const createMockSupabaseClient = () => {
+  return {
+    auth: {
+      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+      signUp: () => Promise.resolve({ data: { user: null, session: null }, error: { message: 'Supabase not configured' } }),
+      signInWithPassword: () => Promise.resolve({ data: { user: null, session: null }, error: { message: 'Supabase not configured' } }),
+      signOut: () => Promise.resolve({ error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
+    },
+    from: () => ({
+      select: () => ({ data: [], error: { message: 'Supabase not configured' } }),
+      insert: () => ({ data: null, error: { message: 'Supabase not configured' } }),
+      update: () => ({ data: null, error: { message: 'Supabase not configured' } }),
+      delete: () => ({ data: null, error: { message: 'Supabase not configured' } })
+    })
+  };
+};
 
-// Test the connection
+// Create the Supabase client or mock client
+export const supabase = hasValidSupabaseConfig 
+  ? createClient(supabaseUrl!, supabaseAnonKey!, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce'
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'creator-copilot@1.0.0'
+        }
+      }
+    })
+  : createMockSupabaseClient() as any;
+
+// Test the connection only if we have valid config
 if (hasValidSupabaseConfig) {
   console.log('✅ Supabase client created successfully');
   
@@ -61,8 +83,7 @@ if (hasValidSupabaseConfig) {
     console.error('❌ Supabase connection error:', error);
   });
 } else {
-  console.error('❌ Cannot create Supabase client - invalid configuration');
-  throw new Error('Supabase configuration is missing or invalid. Please check your environment variables.');
+  console.warn('⚠️ Running in demo mode - Supabase functionality disabled');
 }
 
 export type Profile = {
