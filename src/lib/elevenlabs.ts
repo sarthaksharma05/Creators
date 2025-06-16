@@ -10,6 +10,13 @@ export class ElevenLabsService {
     }
   }
 
+  getConfigStatus() {
+    return {
+      configured: !!this.apiKey,
+      hasApiKey: !!this.apiKey
+    };
+  }
+
   async getVoices() {
     if (!this.apiKey) {
       return this.getMockVoices();
